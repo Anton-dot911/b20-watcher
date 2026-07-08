@@ -1,0 +1,124 @@
+.hero {
+  padding: 64px 0 8px;
+}
+
+.hero__title {
+  font-size: clamp(30px, 5vw, 46px);
+  line-height: 1.08;
+  letter-spacing: -0.02em;
+  font-weight: 800;
+  margin: 12px 0 0;
+  max-width: 18ch;
+}
+
+.hero__tagline {
+  font-size: 18px;
+  color: var(--text-dim);
+  margin: 16px 0 0;
+  max-width: 52ch;
+}
+
+.tableCard {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-elev);
+  overflow: hidden;
+}
+
+.tableHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.tableHead h2 {
+  font-size: 15px;
+  margin: 0;
+  font-weight: 700;
+}
+
+.count {
+  color: var(--text-faint);
+  font-size: 13px;
+}
+
+.tableScroll {
+  overflow-x: auto;
+}
+
+.tableScroll table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 640px;
+}
+
+.tableScroll thead th {
+  text-align: left;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-faint);
+  font-weight: 600;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.tableScroll tbody td {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+  font-size: 14px;
+  vertical-align: middle;
+}
+
+.tableScroll tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.row {
+  transition: background 0.12s ease;
+}
+
+.row:hover {
+  background: var(--bg-elev-2);
+}
+
+.tokenName {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.tokenSymbol {
+  color: var(--text-faint);
+  font-size: 12px;
+  margin-top: 2px;
+}
+
+.addr {
+  color: var(--text-dim);
+  font-size: 12.5px;
+}
+
+.scoreCell {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.scoreNum {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  font-size: 15px;
+}
+
+.viewLink {
+  color: var(--accent);
+  font-weight: 600;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.viewLink::after {
+  content: " →";
+}

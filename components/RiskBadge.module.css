@@ -1,0 +1,52 @@
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 5px 12px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+
+.badge.sm {
+  font-size: 12px;
+  padding: 3px 9px;
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.sm .dot {
+  width: 6px;
+  height: 6px;
+}
+
+.low {
+  color: var(--low);
+  border-color: color-mix(in srgb, var(--low) 40%, transparent);
+  background: color-mix(in srgb, var(--low) 12%, transparent);
+}
+
+.moderate {
+  color: var(--moderate);
+  border-color: color-mix(in srgb, var(--moderate) 40%, transparent);
+  background: color-mix(in srgb, var(--moderate) 12%, transparent);
+}
+
+.high {
+  color: var(--high);
+  border-color: color-mix(in srgb, var(--high) 40%, transparent);
+  background: color-mix(in srgb, var(--high) 12%, transparent);
+}
+
+.critical {
+  color: var(--critical);
+  border-color: color-mix(in srgb, var(--critical) 40%, transparent);
+  background: color-mix(in srgb, var(--critical) 12%, transparent);
+}
