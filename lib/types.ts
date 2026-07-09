@@ -8,10 +8,17 @@ export type RiskLevel = "low" | "moderate" | "high" | "critical";
 export type RiskSeverity = "info" | "low" | "moderate" | "high" | "critical";
 
 /**
- * Known B20 role identifiers. These map to on-chain role hashes but are kept
- * human-readable here for the MVP.
+ * Networks the scanner can query. These map 1:1 to CDP SQL event tables
+ * (see lib/sql.ts). The hyphenated form `base-sepolia` is normalized to the
+ * underscore form before it reaches this type.
  */
-export type B20Role =
+export type B20Network = "base" | "base_sepolia";
+
+/**
+ * Built-in B20 role identifiers the risk engine recognizes. These map to
+ * on-chain role hashes but are kept human-readable here.
+ */
+export type KnownB20Role =
   | "DEFAULT_ADMIN_ROLE"
   | "MINT_ROLE"
   | "BURN_ROLE"
@@ -22,11 +29,21 @@ export type B20Role =
   | "OPERATOR_ROLE";
 
 /**
+ * A B20 role. Live CDP data may carry a role as a raw bytes32 hash that we
+ * cannot decode yet, so the type also admits arbitrary strings. Known roles
+ * keep autocomplete; unknown ones are preserved verbatim and ignored by the
+ * risk engine instead of crashing it. The `string & {}` keeps the known
+ * literals visible in editors while still accepting any string.
+ */
+export type B20Role = KnownB20Role | (string & {});
+
+/**
  * Event names emitted by B20 tokens that the risk engine understands.
  */
-export type B20EventName =
+export type KnownB20EventName =
   | "RoleGranted"
   | "RoleRevoked"
+  | "RoleAdminChanged"
   | "LastAdminRenounced"
   | "Paused"
   | "Unpaused"
@@ -37,6 +54,13 @@ export type B20EventName =
   | "SymbolUpdated"
   | "MultiplierUpdated"
   | "Announcement";
+
+/**
+ * A B20 event name. Live CDP data can surface event types the risk engine does
+ * not score (e.g. `ContractURIUpdated`), so arbitrary strings are admitted and
+ * simply ignored by the engine's `default` branch.
+ */
+export type B20EventName = KnownB20EventName | (string & {});
 
 /**
  * A single normalized B20 event. The `args` bag carries event-specific

@@ -3,10 +3,11 @@ import { notFound } from "next/navigation";
 
 import { RiskBadge } from "@/components/RiskBadge";
 import { normalizeAddress } from "@/lib/address";
-import { getMockToken } from "@/lib/mock-data";
-import { buildRiskReport } from "@/lib/risk";
+import { getB20RiskReport, getB20Token } from "@/lib/data-source";
 import type { RiskLevel, RiskSeverity } from "@/lib/types";
 import styles from "./page.module.css";
+
+export const dynamic = "force-dynamic";
 
 const LEVEL_COLOR: Record<RiskLevel, string> = {
   low: "var(--low)",
@@ -44,10 +45,33 @@ export default async function TokenReportPage({
   const normalized = normalizeAddress(address);
   if (!normalized) notFound();
 
-  const token = getMockToken(normalized);
+  const token = await getB20Token(normalized);
   if (!token) notFound();
 
-  const report = buildRiskReport(token.address, token.events);
+  let report;
+  try {
+    report = await getB20RiskReport(normalized);
+  } catch {
+    report = null;
+  }
+
+  if (!report) {
+    return (
+      <div className="container">
+        <Link href="/" className={styles.back}>
+          ← All tokens
+        </Link>
+        <div className={styles.errorState}>
+          <strong>Risk report unavailable.</strong>
+          <span>
+            The live data source could not be reached for{" "}
+            <span className="mono">{token.address}</span>. Check the CDP
+            configuration and try again, or run in mock mode.
+          </span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="container">
@@ -167,23 +191,32 @@ export default async function TokenReportPage({
 
       <div className={`${styles.card} ${styles.timeline}`}>
         <h2>Event timeline</h2>
-        {report.timeline.map((event, i) => (
-          <div key={`${event.transactionHash}-${event.logIndex}-${i}`} className={styles.event}>
-            <div className={styles.eventDot} />
-            <div className={styles.eventMain}>
-              <div className={styles.eventName}>{event.name}</div>
-              <div className={styles.eventMeta}>
-                {formatDate(event.timestamp)} · block{" "}
-                {event.blockNumber.toLocaleString("en-US")}
-              </div>
-              <div className={styles.eventArgs}>
-                {Object.entries(event.args)
-                  .map(([k, v]) => `${k}: ${v}`)
-                  .join("  ·  ")}
+        {report.timeline.length === 0 ? (
+          <p style={{ color: "var(--text-dim)", fontSize: 14, margin: 0 }}>
+            No matching B20 events observed for this token.
+          </p>
+        ) : (
+          report.timeline.map((event, i) => (
+            <div
+              key={`${event.transactionHash}-${event.logIndex}-${i}`}
+              className={styles.event}
+            >
+              <div className={styles.eventDot} />
+              <div className={styles.eventMain}>
+                <div className={styles.eventName}>{event.name}</div>
+                <div className={styles.eventMeta}>
+                  {formatDate(event.timestamp)} · block{" "}
+                  {event.blockNumber.toLocaleString("en-US")}
+                </div>
+                <div className={styles.eventArgs}>
+                  {Object.entries(event.args)
+                    .map(([k, v]) => `${k}: ${v}`)
+                    .join("  ·  ")}
+                </div>
               </div>
             </div>
-          </div>
-        ))}
+          ))
+        )}
       </div>
 
       <div className={styles.disclaimer}>

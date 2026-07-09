@@ -111,6 +111,17 @@ a {
   background: var(--moderate);
 }
 
+/* Live-data variant of the mode badge. */
+.mock-badge--live {
+  color: var(--low);
+  border-color: color-mix(in srgb, var(--low) 40%, transparent);
+  background: color-mix(in srgb, var(--low) 12%, transparent);
+}
+
+.mock-badge--live .mock-badge__dot {
+  background: var(--low);
+}
+
 /* Footer ------------------------------------------------------------------ */
 .site-footer {
   border-top: 1px solid var(--border);

@@ -2,10 +2,12 @@ import Link from "next/link";
 
 import { RiskBadge } from "@/components/RiskBadge";
 import { shortenAddress } from "@/lib/address";
-import { getMockTokens } from "@/lib/mock-data";
-import { buildRiskReport } from "@/lib/risk";
-import type { RiskLevel } from "@/lib/types";
+import { dataModeLabel, MOCK_MODE } from "@/lib/config";
+import { getB20RiskReport, listB20Tokens } from "@/lib/data-source";
+import type { B20Token, RiskLevel, RiskReport } from "@/lib/types";
 import styles from "./page.module.css";
+
+export const dynamic = "force-dynamic";
 
 const SCORE_COLOR: Record<RiskLevel, string> = {
   low: "var(--low)",
@@ -14,11 +16,26 @@ const SCORE_COLOR: Record<RiskLevel, string> = {
   critical: "var(--critical)",
 };
 
-export default function HomePage() {
-  const tokens = getMockTokens().map((token) => {
-    const report = buildRiskReport(token.address, token.events);
-    return { token, report };
-  });
+type Row = { token: B20Token; report: RiskReport | null };
+
+export default async function HomePage() {
+  let rows: Row[] = [];
+  let loadError = false;
+
+  try {
+    const tokens = await listB20Tokens();
+    rows = await Promise.all(
+      tokens.map(async (token) => {
+        try {
+          return { token, report: await getB20RiskReport(token.address) };
+        } catch {
+          return { token, report: null };
+        }
+      })
+    );
+  } catch {
+    loadError = true;
+  }
 
   return (
     <div className="container">
@@ -38,58 +55,88 @@ export default function HomePage() {
         <div className={styles.tableCard}>
           <div className={styles.tableHead}>
             <h2>Recent B20 tokens</h2>
-            <span className={styles.count}>{tokens.length} tracked</span>
+            <span className={styles.count}>
+              {loadError ? dataModeLabel() : `${rows.length} tracked`}
+            </span>
           </div>
-          <div className={styles.tableScroll}>
-            <table>
-              <thead>
-                <tr>
-                  <th>Token</th>
-                  <th>Address</th>
-                  <th>Risk score</th>
-                  <th>Level</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {tokens.map(({ token, report }) => (
-                  <tr key={token.address} className={styles.row}>
-                    <td>
-                      <div className={styles.tokenName}>{token.name}</div>
-                      <div className={styles.tokenSymbol}>{token.symbol}</div>
-                    </td>
-                    <td>
-                      <span className={`mono ${styles.addr}`}>
-                        {shortenAddress(token.address)}
-                      </span>
-                    </td>
-                    <td>
-                      <div className={styles.scoreCell}>
-                        <span
-                          className={styles.scoreNum}
-                          style={{ color: SCORE_COLOR[report.level] }}
-                        >
-                          {report.score}
-                        </span>
-                        <span className={styles.count}>/ 100</span>
-                      </div>
-                    </td>
-                    <td>
-                      <RiskBadge level={report.level} size="sm" />
-                    </td>
-                    <td style={{ textAlign: "right" }}>
-                      <Link
-                        href={`/tokens/${token.address}`}
-                        className={styles.viewLink}
-                      >
-                        View report
-                      </Link>
-                    </td>
+
+          {loadError ? (
+            <div className={styles.errorState}>
+              <strong>Live data unavailable.</strong>
+              <span>
+                The {dataModeLabel()} data source could not be reached. Check the
+                CDP configuration and try again, or run in mock mode.
+              </span>
+            </div>
+          ) : (
+            <div className={styles.tableScroll}>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Token</th>
+                    <th>Address</th>
+                    <th>Risk score</th>
+                    <th>Level</th>
+                    <th></th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {rows.map(({ token, report }) => (
+                    <tr key={token.address} className={styles.row}>
+                      <td>
+                        <div className={styles.tokenName}>{token.name}</div>
+                        <div className={styles.tokenSymbol}>{token.symbol}</div>
+                      </td>
+                      <td>
+                        <span className={`mono ${styles.addr}`}>
+                          {shortenAddress(token.address)}
+                        </span>
+                      </td>
+                      <td>
+                        <div className={styles.scoreCell}>
+                          {report ? (
+                            <>
+                              <span
+                                className={styles.scoreNum}
+                                style={{ color: SCORE_COLOR[report.level] }}
+                              >
+                                {report.score}
+                              </span>
+                              <span className={styles.count}>/ 100</span>
+                            </>
+                          ) : (
+                            <span className={styles.count}>unavailable</span>
+                          )}
+                        </div>
+                      </td>
+                      <td>
+                        {report ? (
+                          <RiskBadge level={report.level} size="sm" />
+                        ) : (
+                          <span className={styles.count}>—</span>
+                        )}
+                      </td>
+                      <td style={{ textAlign: "right" }}>
+                        <Link
+                          href={`/tokens/${token.address}`}
+                          className={styles.viewLink}
+                        >
+                          View report
+                        </Link>
+                      </td>
+                    </tr>
+                  ))}
+                  {rows.length === 0 && (
+                    <tr>
+                      <td colSpan={5} className={styles.count}>
+                        No B20 tokens found{MOCK_MODE ? "." : " in the recent window."}
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       </section>
     </div>
