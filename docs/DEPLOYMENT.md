@@ -1,6 +1,6 @@
 # Deployment runbook
 
-This runbook is for deploying **B20 Watcher / Risk Scanner** to Vercel with Supabase cached mode.
+This runbook is for deploying **B20 Watcher / Risk Scanner** with Supabase cached mode.
 
 The safest production path is:
 
@@ -10,6 +10,8 @@ The safest production path is:
 4. Switch to cached Supabase mode.
 5. Run a small refresh smoke test.
 6. Verify public read endpoints.
+
+The app can be deployed to either **Vercel** or **Netlify**. Vercel is the most direct Next.js path, but Netlify is also supported for this architecture.
 
 ## 1. Vercel project
 
@@ -41,7 +43,43 @@ curl https://<your-domain>/api/tokens
 
 The header should show `Mock mode`.
 
-## 2. Supabase schema
+## 2. Netlify project
+
+Import the GitHub repository into Netlify.
+
+Build settings:
+
+```txt
+Framework preset: Next.js
+Install command: npm ci
+Build command: npm run build
+Publish directory: .next
+```
+
+Initial safe env:
+
+```env
+MOCK_MODE=true
+DATA_SOURCE=mock
+B20_NETWORK=base
+```
+
+Deploy and check:
+
+```bash
+curl https://<your-site>.netlify.app/api/health
+curl https://<your-site>.netlify.app/api/tokens
+```
+
+Expected:
+
+- `/api/health` returns a secret-free health payload.
+- `/api/tokens` returns mock tokens.
+- The app header shows `Mock mode`.
+
+Netlify should treat Next.js route handlers such as `/api/health`, `/api/tokens`, `/api/risk/[address]`, and `/api/refresh/*` as server-side functions. Refresh endpoints may take longer than simple read endpoints, so start with a small refresh limit, such as `5`.
+
+## 3. Supabase schema
 
 Create a Supabase project and run:
 
@@ -57,9 +95,9 @@ The schema creates:
 
 Rows are scoped by `network`, so the same token address can exist on `base` and `base_sepolia` without collision.
 
-## 3. Production env vars
+## 4. Production env vars
 
-For cached Supabase mode, set these in Vercel:
+For cached Supabase mode, set these in your hosting provider:
 
 ```env
 MOCK_MODE=false
@@ -83,7 +121,7 @@ Security rules:
 - `REFRESH_SECRET` must be long and random.
 - Refresh endpoints must not be public without the `x-refresh-secret` header.
 
-## 4. Health check
+## 5. Health check
 
 After setting env vars and redeploying:
 
@@ -107,7 +145,7 @@ Expected shape:
 
 This endpoint is intentionally secret-free and does not call CDP or Supabase.
 
-## 5. Refresh smoke test
+## 6. Refresh smoke test
 
 Run a conservative refresh first:
 
@@ -131,7 +169,7 @@ Expected shape:
 
 Actual counts may differ depending on live B20 data and CDP response.
 
-## 6. Public read smoke tests
+## 7. Public read smoke tests
 
 After refresh:
 
@@ -145,7 +183,7 @@ Expected:
 - `/api/tokens` returns `mockMode: false`, `network: "base"`, and a non-empty token list.
 - `/api/risk/<token-address>` returns a report with `score`, `level`, `flags`, `activeRoles`, `stats`, and `timeline`.
 
-## 7. Failure diagnostics
+## 8. Failure diagnostics
 
 ### `/api/health` works but `/api/tokens` fails
 
@@ -169,6 +207,16 @@ Common causes:
 - Supabase service-role key missing or wrong
 - Supabase schema not applied
 - CDP SQL API returned an upstream error
+- refresh request exceeded the hosting provider's function limits
+
+On Netlify, reduce the refresh body to a smaller limit first:
+
+```bash
+curl -X POST https://<your-site>.netlify.app/api/refresh/recent \
+  -H "Content-Type: application/json" \
+  -H "x-refresh-secret: <REFRESH_SECRET>" \
+  -d '{"limit": 2}'
+```
 
 ### Dashboard is empty in cached mode
 
@@ -181,7 +229,7 @@ curl -X POST https://<your-domain>/api/refresh/recent \
   -d '{"limit": 5}'
 ```
 
-## 8. Suggested operating cadence
+## 9. Suggested operating cadence
 
 Until scheduled refresh exists, manually run:
 
