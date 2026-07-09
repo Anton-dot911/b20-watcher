@@ -11,11 +11,12 @@
 -- service-role key, and read by lib/b20-cache.ts in DATA_SOURCE=supabase mode.
 --
 -- Rows are network-scoped (base | base_sepolia) so a single project can hold
--- both networks without collisions.
+-- both networks without collisions, even when the same address exists on
+-- multiple networks.
 
 -- Token snapshots discovered from the B20 factory's B20Created events.
 create table if not exists b20_tokens (
-  address              text primary key,
+  address              text not null,
   network              text not null,
   name                 text,
   symbol               text,
@@ -26,7 +27,8 @@ create table if not exists b20_tokens (
   created_block_number bigint,
   created_log_index    integer,
   last_seen_at         timestamptz not null default now(),
-  updated_at           timestamptz not null default now()
+  updated_at           timestamptz not null default now(),
+  primary key (network, address)
 );
 
 -- Newest-first token listing per network (dashboard / getCachedTokens).
@@ -37,7 +39,7 @@ create index if not exists b20_tokens_network_created_at_idx
 create table if not exists b20_events (
   id               text primary key,
   network          text not null,
-  token_address    text not null references b20_tokens(address) on delete cascade,
+  token_address    text not null,
   event_name       text not null,
   event_signature  text,
   block_timestamp  timestamptz,
@@ -46,6 +48,8 @@ create table if not exists b20_events (
   log_index        integer not null,
   args             jsonb not null default '{}',
   created_at       timestamptz not null default now(),
+  foreign key (network, token_address)
+    references b20_tokens(network, address) on delete cascade,
   unique (network, transaction_hash, log_index)
 );
 
@@ -53,9 +57,9 @@ create table if not exists b20_events (
 create index if not exists b20_events_timeline_idx
   on b20_events (network, token_address, block_number, log_index);
 
--- Latest computed risk report per token (one row per token).
+-- Latest computed risk report per token per network.
 create table if not exists b20_risk_reports (
-  token_address text primary key references b20_tokens(address) on delete cascade,
+  token_address text not null,
   network       text not null,
   score         integer not null,
   level         text not null,
@@ -65,5 +69,8 @@ create table if not exists b20_risk_reports (
   stats         jsonb not null,
   timeline      jsonb not null,
   generated_at  timestamptz not null,
-  updated_at    timestamptz not null default now()
+  updated_at    timestamptz not null default now(),
+  primary key (network, token_address),
+  foreign key (network, token_address)
+    references b20_tokens(network, address) on delete cascade
 );
