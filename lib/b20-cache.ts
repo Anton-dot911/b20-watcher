@@ -25,6 +25,16 @@ import type {
 
 const EPOCH_ISO = new Date(0).toISOString();
 
+/** Supabase upsert conflict target for b20_tokens. Mirrors primary key (network, address). */
+export const TOKEN_UPSERT_CONFLICT_TARGET = "network,address";
+
+/** Supabase upsert conflict target for b20_events. Mirrors unique(network, transaction_hash, log_index). */
+export const EVENT_UPSERT_CONFLICT_TARGET =
+  "network,transaction_hash,log_index";
+
+/** Supabase upsert conflict target for b20_risk_reports. Mirrors primary key (network, token_address). */
+export const RISK_REPORT_UPSERT_CONFLICT_TARGET = "network,token_address";
+
 // --- DB row shapes ----------------------------------------------------------
 
 interface TokenRow {
@@ -215,7 +225,7 @@ export async function upsertTokens(tokens: B20Token[]): Promise<void> {
   const supabase = getSupabaseServerClient();
   const { error } = await supabase
     .from("b20_tokens")
-    .upsert(rows, { onConflict: "address" });
+    .upsert(rows, { onConflict: TOKEN_UPSERT_CONFLICT_TARGET });
   if (error) {
     throw new Error(`Failed to upsert tokens: ${error.message}`);
   }
@@ -251,14 +261,14 @@ export async function upsertEvents(
   const supabase = getSupabaseServerClient();
   const { error } = await supabase
     .from("b20_events")
-    .upsert(rows, { onConflict: "id" });
+    .upsert(rows, { onConflict: EVENT_UPSERT_CONFLICT_TARGET });
   if (error) {
     throw new Error(`Failed to upsert events: ${error.message}`);
   }
 }
 
 /**
- * Upserts the latest risk report for a token (one row per token). Invalid
+ * Upserts the latest risk report for a token on the active network. Invalid
  * token addresses throw.
  */
 export async function upsertRiskReport(report: RiskReport): Promise<void> {
@@ -284,7 +294,7 @@ export async function upsertRiskReport(report: RiskReport): Promise<void> {
   const supabase = getSupabaseServerClient();
   const { error } = await supabase
     .from("b20_risk_reports")
-    .upsert(row, { onConflict: "token_address" });
+    .upsert(row, { onConflict: RISK_REPORT_UPSERT_CONFLICT_TARGET });
   if (error) {
     throw new Error(`Failed to upsert risk report: ${error.message}`);
   }
