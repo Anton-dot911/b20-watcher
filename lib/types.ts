@@ -14,11 +14,12 @@ export type RiskSeverity = "info" | "low" | "moderate" | "high" | "critical";
 export type B20Role =
   | "DEFAULT_ADMIN_ROLE"
   | "MINT_ROLE"
+  | "BURN_ROLE"
   | "BURN_BLOCKED_ROLE"
   | "PAUSE_ROLE"
   | "UNPAUSE_ROLE"
   | "METADATA_ROLE"
-  | "POLICY_ROLE";
+  | "OPERATOR_ROLE";
 
 /**
  * Event names emitted by B20 tokens that the risk engine understands.

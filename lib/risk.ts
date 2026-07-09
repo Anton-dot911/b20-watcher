@@ -17,14 +17,19 @@ import type {
   RoleState,
 } from "./types";
 
+// Built-in B20 roles the scanner recognizes. These are kept human-readable for
+// the MVP (no role-hash decoding yet). OPERATOR_ROLE is relevant for Asset
+// variant features such as multiplier and announcements. Policy changes are
+// admin-gated and tracked as PolicyUpdated events, not as a dedicated role.
 const ALL_ROLES: B20Role[] = [
   "DEFAULT_ADMIN_ROLE",
   "MINT_ROLE",
+  "BURN_ROLE",
   "BURN_BLOCKED_ROLE",
   "PAUSE_ROLE",
   "UNPAUSE_ROLE",
   "METADATA_ROLE",
-  "POLICY_ROLE",
+  "OPERATOR_ROLE",
 ];
 
 /** Chronological ordering by block number then log index. */

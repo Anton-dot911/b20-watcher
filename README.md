@@ -1,8 +1,14 @@
 # B20 Watcher / Risk Scanner
 
+![CI](https://github.com/Anton-dot911/b20-watcher/actions/workflows/ci.yml/badge.svg)
+
 Independent MVP for tracking and risk-scoring **Base B20 native tokens**.
 
 > Know who controls a B20 token before you trust it.
+
+**Mock-only MVP.** All data is mock data — there is no CDP SQL integration and
+no database yet. The risk score estimates **issuer-control and operational
+risk**, _not_ a price prediction or investment advice.
 
 B20 Watcher is a public dashboard and JSON API that scores **issuer-control
 risk** for B20 tokens from their on-chain role, policy, pause, and supply
@@ -105,6 +111,29 @@ See [`.env.example`](.env.example). All are optional for the MVP:
 ```bash
 npm run build
 ```
+
+## Tests
+
+Unit tests (Vitest) cover the risk engine and address validation:
+
+```bash
+npm test          # run once
+npm run test:watch # watch mode
+```
+
+## Continuous integration
+
+GitHub Actions runs on every pull request and on pushes to `main`
+([`.github/workflows/ci.yml`](.github/workflows/ci.yml)). The pipeline uses
+Node 22 and runs:
+
+```bash
+npm ci
+npm run build
+npm test
+```
+
+The build/test status is shown by the CI badge at the top of this README.
 
 ## Roadmap (not in this MVP)
 
