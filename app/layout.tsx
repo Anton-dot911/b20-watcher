@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
-import { MOCK_MODE } from "@/lib/config";
+import { dataModeLabel, MOCK_MODE } from "@/lib/config";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -24,12 +24,10 @@ export default function RootLayout({
               <span className="brand__mark">B</span>
               <span>B20 Watcher</span>
             </Link>
-            {MOCK_MODE && (
-              <span className="mock-badge">
-                <span className="mock-badge__dot" />
-                Mock mode
-              </span>
-            )}
+            <span className={`mock-badge${MOCK_MODE ? "" : " mock-badge--live"}`}>
+              <span className="mock-badge__dot" />
+              {dataModeLabel()}
+            </span>
           </div>
         </header>
         <main>{children}</main>
