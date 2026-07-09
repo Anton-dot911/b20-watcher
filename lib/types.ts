@@ -15,6 +15,13 @@ export type RiskSeverity = "info" | "low" | "moderate" | "high" | "critical";
 export type B20Network = "base" | "base_sepolia";
 
 /**
+ * Where B20 data is read from. `mock` serves bundled fixtures, `cdp` queries the
+ * CDP SQL API directly, and `supabase` reads the Supabase cache populated by the
+ * refresh layer. See lib/config.ts for how MOCK_MODE/DATA_SOURCE resolve this.
+ */
+export type DataSource = "mock" | "cdp" | "supabase";
+
+/**
  * Built-in B20 role identifiers the risk engine recognizes. These map to
  * on-chain role hashes but are kept human-readable here.
  */
