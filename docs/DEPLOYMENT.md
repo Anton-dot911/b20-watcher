@@ -10,6 +10,7 @@ The safest production path is:
 4. Switch to cached Supabase mode.
 5. Run a small refresh smoke test.
 6. Verify public read endpoints.
+7. Enable scheduled refresh.
 
 The app can be deployed to either **Vercel** or **Netlify**. Vercel is the most direct Next.js path, but Netlify is also supported for this architecture.
 
@@ -183,7 +184,51 @@ Expected:
 - `/api/tokens` returns `mockMode: false`, `network: "base"`, and a non-empty token list.
 - `/api/risk/<token-address>` returns a report with `score`, `level`, `flags`, `activeRoles`, `stats`, and `timeline`.
 
-## 8. Failure diagnostics
+## 8. Scheduled refresh with GitHub Actions
+
+After the first manual refresh works, enable the scheduled refresh workflow:
+
+```txt
+.github/workflows/refresh-cache.yml
+```
+
+It runs every 6 hours and can also be started manually from the **Actions** tab.
+
+Create these GitHub Actions secrets in the repository:
+
+```txt
+B20_WATCHER_REFRESH_URL=https://<your-domain>/api/refresh/recent
+B20_WATCHER_REFRESH_SECRET=<same value as REFRESH_SECRET in your hosting provider>
+```
+
+For Netlify:
+
+```txt
+B20_WATCHER_REFRESH_URL=https://<your-site>.netlify.app/api/refresh/recent
+```
+
+For Vercel:
+
+```txt
+B20_WATCHER_REFRESH_URL=https://<your-domain>.vercel.app/api/refresh/recent
+```
+
+Manual run:
+
+1. Open GitHub → repository → **Actions**.
+2. Select **Refresh B20 Cache**.
+3. Click **Run workflow**.
+4. Optional: set `limit` to `5` for a safe first run.
+
+Safety behavior:
+
+- scheduled refresh defaults to `limit=20`;
+- manual refresh accepts a custom limit;
+- the workflow caps the limit to `20`;
+- the workflow fails if the refresh URL or secret is missing;
+- the workflow prints the refresh JSON response but never prints the refresh secret.
+
+## 9. Failure diagnostics
 
 ### `/api/health` works but `/api/tokens` fails
 
@@ -197,6 +242,12 @@ Likely Supabase env or schema issue:
 ### Refresh returns `401`
 
 The `x-refresh-secret` header is missing or does not match `REFRESH_SECRET`.
+
+For scheduled refresh, verify:
+
+- GitHub secret `B20_WATCHER_REFRESH_SECRET`
+- hosting env var `REFRESH_SECRET`
+- both values are identical
 
 ### Refresh returns `500`
 
@@ -229,12 +280,12 @@ curl -X POST https://<your-domain>/api/refresh/recent \
   -d '{"limit": 5}'
 ```
 
-## 9. Suggested operating cadence
+## 10. Suggested operating cadence
 
-Until scheduled refresh exists, manually run:
+Start conservatively:
 
-- small refresh after deploy: `limit: 5`
-- normal refresh later: `limit: 20`
-- single-token refresh when checking a specific token
+- first manual refresh after deploy: `limit: 5`
+- scheduled refresh: every 6 hours, `limit: 20`
+- single-token refresh when checking a specific token manually
 
-Scheduled cron is intentionally out of scope for the current build. Add it in a later PR after the manual refresh path is proven.
+Later work can add event diffing, alerts, and a dedicated refresh job queue if the endpoint becomes too slow for serverless functions.
