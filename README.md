@@ -1,82 +1,144 @@
-# B20 Watcher / Risk Scanner MVP
+# B20 Watcher / Risk Scanner
 
-Independent MVP for tracking and risk-scoring Base B20 native tokens.
+![CI](https://github.com/Anton-dot911/b20-watcher/actions/workflows/ci.yml/badge.svg)
+
+Independent MVP for tracking and risk-scoring **Base B20 native tokens**.
+
+> Know who controls a B20 token before you trust it.
+
+**Mock-only MVP.** All data is mock data — there is no CDP SQL integration and
+no database yet. The risk score estimates **issuer-control and operational
+risk**, _not_ a price prediction or investment advice.
+
+B20 Watcher is a public dashboard and JSON API that scores **issuer-control
+risk** for B20 tokens from their on-chain role, policy, pause, and supply
+events. It answers one question: _who controls this token, and what risks exist
+before I trust it?_
+
+This is **not** a trading bot, a price predictor, or investment advice.
 
 ## What this MVP does
 
-- Discovers new B20 tokens from the B20 Factory event `B20Created(address,uint8,string,string,uint8,bytes)`.
-- Builds token-level risk snapshots from B20 events:
-  - `RoleGranted`
-  - `RoleRevoked`
-  - `LastAdminRenounced`
-  - `Paused`
-  - `Unpaused`
-  - `PolicyUpdated`
-  - `SupplyCapUpdated`
-  - `BurnedBlocked`
-  - `NameUpdated`
-  - `SymbolUpdated`
-  - `MultiplierUpdated`
-  - `Announcement`
-- Exposes:
-  - public dashboard `/`
-  - token detail page `/tokens/:address`
-  - JSON API `/api/tokens`
-  - JSON API `/api/risk/:address`
-- Runs in mock mode by default, so UI can be reviewed immediately.
+- Lists tracked B20 tokens on a public dashboard (`/`).
+- Renders a per-token risk report (`/tokens/[address]`) with a 0–100 score,
+  risk level, summary, flags, active roles, and an event timeline.
+- Serves the same data as JSON via `/api/tokens` and `/api/risk/[address]`.
+- Runs in **mock mode by default**, so the whole product can be reviewed
+  immediately with no external data source, database, or CDP integration.
 
-## Why CDP SQL API first
+## Tech stack
 
-CDP SQL API indexes B20-related events in `base.events`, so this MVP avoids building a custom indexer first.
+- Next.js (App Router) + React + TypeScript
+- Server-side API routes
+- Plain CSS + CSS Modules
+- No database — mock data only in this MVP
 
 ## Quick start
 
 ```bash
 npm install
-cp .env.example .env.local
+cp .env.example .env.local   # optional; mock mode is the default
 npm run dev
 ```
 
-Open:
+Open <http://localhost:3000>.
+
+### Pages
+
+- `/` — dashboard with the recent B20 token list and a "Mock mode" label
+- `/tokens/0xb200000000000000000000000000000000000001` — high-control token report
+- `/tokens/0xb200000000000000000000000000000000000002` — admin-renounced token report
+
+### JSON API
+
+- `GET /api/tokens` — list of tracked tokens with a risk summary each
+- `GET /api/risk/0xb200000000000000000000000000000000000001` — full risk report
+
+## Risk model
+
+The risk engine lives in [`lib/risk.ts`](lib/risk.ts) as a reusable
+`buildRiskReport(tokenAddress, events)` function. It replays a token's events
+to derive current role state and operational conditions, then applies weighted
+flags:
+
+| Condition | Effect |
+| --- | --- |
+| Active `DEFAULT_ADMIN_ROLE` | High issuer-control risk |
+| Active `MINT_ROLE` | Mint / inflation risk |
+| Active `BURN_BLOCKED_ROLE` | Freeze / seize risk |
+| `PolicyUpdated` | Policy restriction risk |
+| `SupplyCapUpdated` | Supply-control risk |
+| `Paused` without a later `Unpaused` | High pause risk |
+| `LastAdminRenounced` | Reduces admin risk, but other active-role risks remain |
+
+Score-to-level thresholds: `0–24 low`, `25–49 moderate`, `50–74 high`,
+`75–100 critical`.
+
+Regulated tokens may intentionally use pause, freeze, blocklist, and supply
+controls. Flags describe **capabilities, not intent**.
+
+## Project structure
 
 ```txt
-http://localhost:3000
+app/
+  layout.tsx                     app shell + Mock mode badge
+  page.tsx                       dashboard
+  tokens/[address]/page.tsx      token risk report
+  api/tokens/route.ts            GET /api/tokens
+  api/risk/[address]/route.ts    GET /api/risk/[address]
+components/
+  RiskBadge.tsx                  risk-level badge
+lib/
+  types.ts                       domain types
+  mock-data.ts                   mock B20 tokens + events
+  risk.ts                        buildRiskReport risk engine
+  address.ts                     address validation/normalization
+  config.ts                      MOCK_MODE flag
+docs/                            product + risk model notes
 ```
 
-## Real data mode
+## Environment variables
 
-1. Create CDP credentials in Coinbase Developer Platform.
-2. Generate a Bearer token for the SQL API.
-3. Set:
+See [`.env.example`](.env.example). All are optional for the MVP:
 
-```env
-MOCK_MODE=false
-CDP_BEARER_TOKEN=your_generated_bearer_token
-B20_NETWORK=base
-```
+- `MOCK_MODE` — defaults to `true`. Set to `false` for future real-data mode.
+- `B20_NETWORK` — `base` (default) or `base-sepolia`.
+- `CDP_BEARER_TOKEN` — only for future real-data mode; **not required here**.
+- `B20_FACTORY_ADDRESS` — factory used for token discovery in real-data mode.
 
-4. Run:
+## Build
 
 ```bash
-npm run dev
+npm run build
 ```
 
-## Current limitation
+## Tests
 
-This starter expects a ready `CDP_BEARER_TOKEN`. Production version should add automatic JWT generation from CDP API key name/private key.
+Unit tests (Vitest) cover the risk engine and address validation:
 
-## Product positioning
+```bash
+npm test          # run once
+npm run test:watch # watch mode
+```
 
-**B20 Watcher — security and issuer-control intelligence for Base-native tokens.**
+## Continuous integration
 
-Core user value:
+GitHub Actions runs on every pull request and on pushes to `main`
+([`.github/workflows/ci.yml`](.github/workflows/ci.yml)). The pipeline uses
+Node 22 and runs:
 
-> Know who controls a B20 token before you trust it.
+```bash
+npm ci
+npm run build
+npm test
+```
 
-## Next build steps
+The build/test status is shown by the CI badge at the top of this README.
 
-1. Add automatic CDP Bearer token generation.
-2. Add Supabase cache.
-3. Add scheduled refresh for discovered B20 tokens.
-4. Add paid reports or x402 endpoint.
-5. Add alerting for role, policy, pause, and supply-cap changes.
+## Roadmap (not in this MVP)
+
+1. CDP SQL API integration for real B20 discovery and event timelines.
+2. Automatic CDP JWT bearer generation.
+3. Database/cache for token snapshots and event diffing.
+4. Alerts for role, policy, pause, and supply-cap changes.
+5. Shareable report metadata and paid / x402 endpoints.
