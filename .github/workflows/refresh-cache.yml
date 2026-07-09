@@ -1,0 +1,91 @@
+name: Refresh B20 Cache
+
+on:
+  # Runs every 6 hours. GitHub may delay scheduled workflows under load.
+  schedule:
+    - cron: "17 */6 * * *"
+  workflow_dispatch:
+    inputs:
+      limit:
+        description: "Number of recent B20 tokens to refresh"
+        required: false
+        default: "20"
+      refresh_url:
+        description: "Optional override for the refresh endpoint URL"
+        required: false
+        default: ""
+
+concurrency:
+  group: b20-cache-refresh
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Resolve refresh config
+        id: config
+        env:
+          DEFAULT_REFRESH_URL: ${{ secrets.B20_WATCHER_REFRESH_URL }}
+          INPUT_REFRESH_URL: ${{ github.event.inputs.refresh_url }}
+          INPUT_LIMIT: ${{ github.event.inputs.limit }}
+        run: |
+          set -euo pipefail
+
+          REFRESH_URL="${INPUT_REFRESH_URL:-$DEFAULT_REFRESH_URL}"
+          LIMIT="${INPUT_LIMIT:-20}"
+
+          if [ -z "$REFRESH_URL" ]; then
+            echo "B20_WATCHER_REFRESH_URL is missing. Add it as a GitHub Actions secret or pass refresh_url manually." >&2
+            exit 1
+          fi
+
+          if ! printf '%s' "$LIMIT" | grep -Eq '^[0-9]+$'; then
+            echo "limit must be a positive integer." >&2
+            exit 1
+          fi
+
+          if [ "$LIMIT" -lt 1 ]; then
+            echo "limit must be >= 1." >&2
+            exit 1
+          fi
+
+          if [ "$LIMIT" -gt 20 ]; then
+            echo "limit is capped to 20 for scheduled refresh safety. Requested: $LIMIT" >&2
+            LIMIT=20
+          fi
+
+          echo "refresh_url=$REFRESH_URL" >> "$GITHUB_OUTPUT"
+          echo "limit=$LIMIT" >> "$GITHUB_OUTPUT"
+
+      - name: Call refresh endpoint
+        env:
+          REFRESH_URL: ${{ steps.config.outputs.refresh_url }}
+          REFRESH_SECRET: ${{ secrets.B20_WATCHER_REFRESH_SECRET }}
+          LIMIT: ${{ steps.config.outputs.limit }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "$REFRESH_SECRET" ]; then
+            echo "B20_WATCHER_REFRESH_SECRET is missing. Add it as a GitHub Actions secret." >&2
+            exit 1
+          fi
+
+          echo "Calling B20 refresh endpoint with limit=$LIMIT"
+
+          response_file="$(mktemp)"
+          http_status="$(curl -sS -o "$response_file" -w "%{http_code}" \
+            -X POST "$REFRESH_URL" \
+            -H "Content-Type: application/json" \
+            -H "x-refresh-secret: $REFRESH_SECRET" \
+            -d "{\"limit\": $LIMIT}")"
+
+          echo "HTTP status: $http_status"
+          cat "$response_file"
+          echo
+
+          if [ "$http_status" -lt 200 ] || [ "$http_status" -ge 300 ]; then
+            echo "Refresh failed with HTTP status $http_status" >&2
+            exit 1
+          fi
