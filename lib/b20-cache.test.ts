@@ -1,9 +1,34 @@
 import { describe, expect, it } from "vitest";
 
-import { rowToEvent, rowToRiskReport, rowToToken } from "./b20-cache";
+import {
+  EVENT_UPSERT_CONFLICT_TARGET,
+  RISK_REPORT_UPSERT_CONFLICT_TARGET,
+  rowToEvent,
+  rowToRiskReport,
+  rowToToken,
+  TOKEN_UPSERT_CONFLICT_TARGET,
+} from "./b20-cache";
 
 const ADDR = "0xb200000000000000000000000000000000000001";
 const HOLDER = "0xa11ce00000000000000000000000000000000abc";
+
+describe("Supabase cache conflict targets", () => {
+  it("upserts tokens by network + address", () => {
+    expect(TOKEN_UPSERT_CONFLICT_TARGET).toBe("network,address");
+  });
+
+  it("upserts events by network + transaction_hash + log_index", () => {
+    expect(EVENT_UPSERT_CONFLICT_TARGET).toBe(
+      "network,transaction_hash,log_index"
+    );
+  });
+
+  it("upserts risk reports by network + token_address", () => {
+    expect(RISK_REPORT_UPSERT_CONFLICT_TARGET).toBe(
+      "network,token_address"
+    );
+  });
+});
 
 describe("rowToToken", () => {
   it("maps a full DB token row to a B20Token", () => {
