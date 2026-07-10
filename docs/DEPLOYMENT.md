@@ -11,6 +11,7 @@ The safest production path is:
 5. Run a small refresh smoke test.
 6. Verify public read endpoints.
 7. Enable scheduled refresh.
+8. Use diagnostics when refresh returns zero rows.
 
 The app can be deployed to either **Vercel** or **Netlify**. Vercel is the most direct Next.js path, but Netlify is also supported for this architecture.
 
@@ -170,7 +171,67 @@ Expected shape:
 
 Actual counts may differ depending on live B20 data and CDP response.
 
-## 7. Public read smoke tests
+A successful refresh with zero rows is still a successful infrastructure check:
+
+```json
+{
+  "network": "base",
+  "tokens": 0,
+  "events": 0,
+  "reports": 0
+}
+```
+
+Use diagnostics to determine whether CDP returned zero B20 deployments or whether another data-source issue exists.
+
+## 7. Diagnostics endpoint
+
+The diagnostics endpoint is protected by the same `x-refresh-secret` header as refresh endpoints:
+
+```bash
+curl -X POST https://<your-domain>/api/diagnostics \
+  -H "Content-Type: application/json" \
+  -H "x-refresh-secret: <REFRESH_SECRET>" \
+  -d '{"limit": 5}'
+```
+
+Expected shape:
+
+```json
+{
+  "ok": true,
+  "service": "b20-watcher",
+  "mockMode": false,
+  "dataSource": "supabase",
+  "network": "base",
+  "factoryAddress": "0xB20f000000000000000000000000000000000000",
+  "discoveryLimit": 5,
+  "cdp": {
+    "ok": true,
+    "rows": 0,
+    "sampleRows": []
+  },
+  "supabase": {
+    "ok": true,
+    "tables": {
+      "b20_tokens": { "ok": true, "count": 0 },
+      "b20_events": { "ok": true, "count": 0 },
+      "b20_risk_reports": { "ok": true, "count": 0 }
+    }
+  }
+}
+```
+
+Interpretation:
+
+- `cdp.ok=false` means the CDP SQL request failed or `CDP_BEARER_TOKEN` is wrong/missing.
+- `cdp.rows=0` means CDP SQL returned no recent `B20Created` rows for the selected network/factory.
+- `supabase.ok=false` means the Supabase URL/key/schema is wrong or missing.
+- table `ok=false` usually means the schema was not applied or the service-role key is wrong.
+
+The diagnostics response is designed to be secret-free. It should not include CDP tokens, Supabase keys, or refresh secrets.
+
+## 8. Public read smoke tests
 
 After refresh:
 
@@ -184,7 +245,7 @@ Expected:
 - `/api/tokens` returns `mockMode: false`, `network: "base"`, and a non-empty token list.
 - `/api/risk/<token-address>` returns a report with `score`, `level`, `flags`, `activeRoles`, `stats`, and `timeline`.
 
-## 8. Scheduled refresh with GitHub Actions
+## 9. Scheduled refresh with GitHub Actions
 
 After the first manual refresh works, enable the scheduled refresh workflow:
 
@@ -228,7 +289,7 @@ Safety behavior:
 - the workflow fails if the refresh URL or secret is missing;
 - the workflow prints the refresh JSON response but never prints the refresh secret.
 
-## 9. Failure diagnostics
+## 10. Failure diagnostics
 
 ### `/api/health` works but `/api/tokens` fails
 
@@ -260,6 +321,8 @@ Common causes:
 - CDP SQL API returned an upstream error
 - refresh request exceeded the hosting provider's function limits
 
+Run `/api/diagnostics` next. It separates CDP discovery failures from Supabase table/key/schema failures.
+
 On Netlify, reduce the refresh body to a smaller limit first:
 
 ```bash
@@ -280,7 +343,9 @@ curl -X POST https://<your-domain>/api/refresh/recent \
   -d '{"limit": 5}'
 ```
 
-## 10. Suggested operating cadence
+If refresh succeeds with zero rows, run `/api/diagnostics` to confirm whether CDP discovery returned zero rows.
+
+## 11. Suggested operating cadence
 
 Start conservatively:
 
