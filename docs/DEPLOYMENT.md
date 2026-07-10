@@ -12,6 +12,7 @@ The safest production path is:
 6. Verify public read endpoints.
 7. Enable scheduled refresh.
 8. Use diagnostics when refresh returns zero rows.
+9. Use CDP discovery probe when diagnostics shows `cdp.rows=0`.
 
 The app can be deployed to either **Vercel** or **Netlify**. Vercel is the most direct Next.js path, but Netlify is also supported for this architecture.
 
@@ -231,7 +232,56 @@ Interpretation:
 
 The diagnostics response is designed to be secret-free. It should not include CDP tokens, Supabase keys, or refresh secrets.
 
-## 8. Public read smoke tests
+## 8. CDP discovery probe
+
+If `/api/diagnostics` returns `cdp.ok=true` and `cdp.rows=0`, run the CDP discovery probe:
+
+```bash
+curl -X POST https://<your-domain>/api/diagnostics/cdp-probe \
+  -H "Content-Type: application/json" \
+  -H "x-refresh-secret: <REFRESH_SECRET>" \
+  -d '{"limit": 5}'
+```
+
+The probe checks multiple CDP SQL hypotheses:
+
+- exact factory address count;
+- lowercase factory address count;
+- latest events emitted by the factory;
+- `B20Created` filtered by `event_signature`;
+- `B20Created` filtered by `event_name`;
+- `B20Created` by signature anywhere in the network table;
+- `B20Created` by event name anywhere in the network table.
+
+Key fields:
+
+```json
+{
+  "ok": true,
+  "network": "base",
+  "table": "base.events",
+  "factoryAddress": "0xB20f000000000000000000000000000000000000",
+  "factoryAddressLowercase": "0xb20f000000000000000000000000000000000000",
+  "checks": {
+    "factoryExactAddressCount": { "ok": true, "count": 0 },
+    "factoryLowercaseAddressCount": { "ok": true, "count": 0 },
+    "factoryLatestEvents": { "ok": true, "rows": [] },
+    "b20CreatedBySignatureCount": { "ok": true, "count": 0 },
+    "b20CreatedByEventNameCount": { "ok": true, "count": 0 },
+    "b20CreatedSignatureAnywhere": { "ok": true, "rows": [] },
+    "b20CreatedEventNameAnywhere": { "ok": true, "rows": [] }
+  }
+}
+```
+
+Interpretation:
+
+- factory counts > 0 but B20Created counts = 0: factory emits events, but the event name/signature filter is wrong or B20Created is not indexed as expected.
+- lowercase factory count > exact factory count: CDP stores addresses lowercase, and discovery should use lowercase matching.
+- B20Created anywhere > 0 but factory-specific count = 0: factory address is wrong or different on the selected network.
+- all counts = 0: CDP table has no indexed B20 factory/discovery data for the selected network yet.
+
+## 9. Public read smoke tests
 
 After refresh:
 
@@ -245,7 +295,7 @@ Expected:
 - `/api/tokens` returns `mockMode: false`, `network: "base"`, and a non-empty token list.
 - `/api/risk/<token-address>` returns a report with `score`, `level`, `flags`, `activeRoles`, `stats`, and `timeline`.
 
-## 9. Scheduled refresh with GitHub Actions
+## 10. Scheduled refresh with GitHub Actions
 
 After the first manual refresh works, enable the scheduled refresh workflow:
 
@@ -289,7 +339,7 @@ Safety behavior:
 - the workflow fails if the refresh URL or secret is missing;
 - the workflow prints the refresh JSON response but never prints the refresh secret.
 
-## 10. Failure diagnostics
+## 11. Failure diagnostics
 
 ### `/api/health` works but `/api/tokens` fails
 
@@ -343,9 +393,9 @@ curl -X POST https://<your-domain>/api/refresh/recent \
   -d '{"limit": 5}'
 ```
 
-If refresh succeeds with zero rows, run `/api/diagnostics` to confirm whether CDP discovery returned zero rows.
+If refresh succeeds with zero rows, run `/api/diagnostics` to confirm whether CDP discovery returned zero rows, then `/api/diagnostics/cdp-probe` to inspect query assumptions.
 
-## 11. Suggested operating cadence
+## 12. Suggested operating cadence
 
 Start conservatively:
 
