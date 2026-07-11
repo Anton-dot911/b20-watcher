@@ -10,6 +10,8 @@ import {
 
 const TOKEN = "0xb200000000000000000000000000000000000001";
 
+const FACTORY_LOWER = "0xb20f000000000000000000000000000000000000";
+
 describe("parseNetwork", () => {
   it("accepts base", () => {
     expect(parseNetwork("base")).toBe("base");
@@ -69,15 +71,23 @@ describe("discoverB20TokensSql", () => {
     expect(sql).toContain("FROM base_sepolia.events");
   });
 
-  it("filters on the B20Created signature, factory, and added action", () => {
+  it("filters on the B20Created signature, lowercase factory, and added action", () => {
     const sql = discoverB20TokensSql("base", 50);
     expect(sql).toContain(
       "event_signature = 'B20Created(address,uint8,string,string,uint8,bytes)'"
     );
-    expect(sql).toContain(
+    expect(sql).toContain(`address = '${FACTORY_LOWER}'`);
+    expect(sql).not.toContain(
       "address = '0xB20f000000000000000000000000000000000000'"
     );
     expect(sql).toContain("action = 'added'");
+  });
+
+  it("lowercases a valid factory override because CDP stores EVM addresses lowercase", () => {
+    const factory = "0xABC0000000000000000000000000000000000001";
+    expect(discoverB20TokensSql("base", 10, factory)).toContain(
+      "address = '0xabc0000000000000000000000000000000000001'"
+    );
   });
 
   it("clamps the limit to 1-100", () => {
@@ -85,18 +95,9 @@ describe("discoverB20TokensSql", () => {
     expect(discoverB20TokensSql("base", 0)).toContain("LIMIT 1");
   });
 
-  it("falls back to the default factory when given an invalid factory", () => {
+  it("falls back to the lowercased default factory when given an invalid factory", () => {
     const sql = discoverB20TokensSql("base", 10, "not-an-address");
-    expect(sql).toContain(
-      "address = '0xB20f000000000000000000000000000000000000'"
-    );
-  });
-
-  it("uses a provided valid factory override", () => {
-    const factory = "0xabc0000000000000000000000000000000000001";
-    expect(discoverB20TokensSql("base", 10, factory)).toContain(
-      `address = '${factory}'`
-    );
+    expect(sql).toContain(`address = '${FACTORY_LOWER}'`);
   });
 });
 
