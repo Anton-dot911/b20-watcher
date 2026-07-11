@@ -294,12 +294,23 @@
 }
 
 .mobileCard {
-  padding: 18px 20px;
-  border-bottom: 1px solid var(--border);
+  position: relative;
+  padding: 22px 20px;
+  border-bottom: none;
 }
 
-.mobileCard:last-child {
-  border-bottom: none;
+.mobileCard + .mobileCard::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 20px;
+  right: 20px;
+  height: 1px;
+  background: color-mix(in srgb, var(--accent) 42%, var(--border-strong));
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--accent) 10%, transparent),
+    0 0 12px color-mix(in srgb, var(--accent) 18%, transparent);
+  opacity: 0.9;
 }
 
 .mobileCardHeader,
