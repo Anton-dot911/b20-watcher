@@ -6,14 +6,9 @@ import { DEFAULT_REFRESH_LIMIT, refreshRecentB20Tokens } from "@/lib/refresh";
 export const dynamic = "force-dynamic";
 
 // POST /api/refresh/recent
-// Discovers recent B20 tokens from CDP SQL and populates the Supabase cache
-// (token snapshots, event timelines, risk reports).
-//
-// Auth: requires the `x-refresh-secret` header to match REFRESH_SECRET.
-//   401 — header missing or wrong.
-//   500 — REFRESH_SECRET not configured on the server, or the refresh failed.
-//
-// Body (optional JSON): { "limit": 20 }. Defaults to a conservative limit.
+// Discovers recent B20 tokens from CDP SQL and populates the Supabase cache.
+// Auth: requires x-refresh-secret.
+// Body: { "limit": 20 }
 export async function POST(request: Request) {
   const auth = checkRefreshSecret(request.headers.get("x-refresh-secret"));
   if (!auth.ok) {
@@ -34,12 +29,9 @@ export async function POST(request: Request) {
 
   try {
     const result = await refreshRecentB20Tokens(limit);
-    return NextResponse.json(result);
+    return NextResponse.json(result, { status: result.partial ? 207 : 200 });
   } catch (error) {
     console.error("POST /api/refresh/recent failed:", error);
-    return NextResponse.json(
-      { error: "Refresh failed. Check CDP and Supabase configuration." },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Refresh failed." }, { status: 500 });
   }
 }
