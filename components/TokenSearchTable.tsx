@@ -5,6 +5,10 @@ import { useMemo, useState } from "react";
 
 import { RiskBadge } from "@/components/RiskBadge";
 import { CopyValue } from "@/components/CopyValue";
+import {
+  explainRiskScore,
+  formatScoreReason,
+} from "@/lib/score-explanation";
 import type { B20Token, RiskLevel, RiskReport } from "@/lib/types";
 import styles from "@/app/page.module.css";
 
@@ -34,6 +38,8 @@ function formatUtc(iso: string): string {
 
 function searchableText(row: Row): string {
   const { token, report } = row;
+  const explanation = report ? explainRiskScore(report) : null;
+
   return [
     token.name,
     token.symbol,
@@ -41,6 +47,8 @@ function searchableText(row: Row): string {
     report?.level,
     report?.score,
     report?.summary,
+    explanation?.mainReason.title,
+    ...(explanation?.reasons.map((reason) => reason.title) ?? []),
     ...(report?.flags.map((flag) => flag.title) ?? []),
   ]
     .filter(Boolean)
@@ -77,7 +85,7 @@ export function TokenSearchTable({ rows }: TokenSearchTableProps) {
           <input
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Name, symbol, address, risk level…"
+            placeholder="Name, symbol, address, risk reason…"
             className={styles.searchInput}
           />
         </label>
@@ -98,7 +106,7 @@ export function TokenSearchTable({ rows }: TokenSearchTableProps) {
       {filteredRows.length === 0 ? (
         <div className={styles.emptyState}>
           <strong>No matching tokens.</strong>
-          <span>Try a token symbol, address fragment, or risk level.</span>
+          <span>Try a token symbol, address fragment, or risk reason.</span>
         </div>
       ) : (
         <div className={styles.tableScroll}>
@@ -109,70 +117,84 @@ export function TokenSearchTable({ rows }: TokenSearchTableProps) {
                 <th>Address</th>
                 <th>Events</th>
                 <th>Risk score</th>
+                <th>Main reason</th>
                 <th>Level</th>
                 <th>Generated</th>
                 <th></th>
               </tr>
             </thead>
             <tbody>
-              {filteredRows.map(({ token, report }) => (
-                <tr key={token.address} className={styles.row}>
-                  <td>
-                    <div className={styles.tokenName}>{token.name || "Unnamed B20"}</div>
-                    <div className={styles.tokenSymbol}>{token.symbol || "—"}</div>
-                  </td>
-                  <td>
-                    <CopyValue
-                      value={token.address}
-                      label="token address"
-                      compact
-                      className={`mono ${styles.addr}`}
-                    />
-                  </td>
-                  <td>
-                    <span className={styles.count}>
-                      {report ? report.stats.totalEvents : "—"}
-                    </span>
-                  </td>
-                  <td>
-                    <div className={styles.scoreCell}>
-                      {report ? (
-                        <>
-                          <span
-                            className={styles.scoreNum}
-                            style={{ color: SCORE_COLOR[report.level] }}
-                          >
-                            {report.score}
-                          </span>
-                          <span className={styles.count}>/ 100</span>
-                        </>
+              {filteredRows.map(({ token, report }) => {
+                const explanation = report ? explainRiskScore(report) : null;
+
+                return (
+                  <tr key={token.address} className={styles.row}>
+                    <td>
+                      <div className={styles.tokenName}>{token.name || "Unnamed B20"}</div>
+                      <div className={styles.tokenSymbol}>{token.symbol || "—"}</div>
+                    </td>
+                    <td>
+                      <CopyValue
+                        value={token.address}
+                        label="token address"
+                        compact
+                        className={`mono ${styles.addr}`}
+                      />
+                    </td>
+                    <td>
+                      <span className={styles.count}>
+                        {report ? report.stats.totalEvents : "—"}
+                      </span>
+                    </td>
+                    <td>
+                      <div className={styles.scoreCell}>
+                        {report ? (
+                          <>
+                            <span
+                              className={styles.scoreNum}
+                              style={{ color: SCORE_COLOR[report.level] }}
+                            >
+                              {report.score}
+                            </span>
+                            <span className={styles.count}>/ 100</span>
+                          </>
+                        ) : (
+                          <span className={styles.count}>unavailable</span>
+                        )}
+                      </div>
+                    </td>
+                    <td>
+                      {explanation ? (
+                        <span className={styles.reasonText}>
+                          {formatScoreReason(explanation.mainReason)}
+                        </span>
                       ) : (
-                        <span className={styles.count}>unavailable</span>
+                        <span className={styles.count}>—</span>
                       )}
-                    </div>
-                  </td>
-                  <td>
-                    {report ? (
-                      <RiskBadge level={report.level} size="sm" />
-                    ) : (
-                      <span className={styles.count}>—</span>
-                    )}
-                  </td>
-                  <td>
-                    <span className={styles.count}>
-                      {report ? formatUtc(report.generatedAt) : "—"}
-                    </span>
-                  </td>
-                  <td style={{ textAlign: "right" }}>
-                    <Link
-                      href={`/tokens/${token.address}`}
-                      className={styles.viewLink}
-                    >
-                      View report
-                    </Link>
-                  </td>
-                </tr>
-              ))}
+                    </td>
+                    <td>
+                      {report ? (
+                        <RiskBadge level={report.level} size="sm" />
+                      ) : (
+                        <span className={styles.count}>—</span>
+                      )}
+                    </td>
+                    <td>
+                      <span className={styles.count}>
+                        {report ? formatUtc(report.generatedAt) : "—"}
+                      </span>
+                    </td>
+                    <td style={{ textAlign: "right" }}>
+                      <Link
+                        href={`/tokens/${token.address}`}
+                        className={styles.viewLink}
+                      >
+                        View report
+                      </Link>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
