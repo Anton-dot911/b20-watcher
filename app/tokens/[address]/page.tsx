@@ -2,9 +2,10 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { RiskBadge } from "@/components/RiskBadge";
-import { normalizeAddress } from "@/lib/address";
+import { normalizeAddress, shortenAddress } from "@/lib/address";
+import { B20_NETWORK, dataModeLabel } from "@/lib/config";
 import { getB20RiskReport, getB20Token } from "@/lib/data-source";
-import type { RiskLevel, RiskSeverity } from "@/lib/types";
+import type { B20Event, RiskLevel, RiskSeverity } from "@/lib/types";
 import styles from "./page.module.css";
 
 export const dynamic = "force-dynamic";
@@ -36,6 +37,22 @@ function formatDate(iso: string): string {
   });
 }
 
+function networkLabel(): string {
+  return B20_NETWORK === "base_sepolia" ? "Base Sepolia" : "Base";
+}
+
+function formatEventArgs(event: B20Event): string {
+  const args = Object.entries(event.args)
+    .filter(([, value]) => value !== "" && value != null)
+    .map(([key, value]) => {
+      const text = String(value);
+      const display = normalizeAddress(text) ? shortenAddress(text) : text;
+      return `${key}: ${display}`;
+    });
+
+  return args.length > 0 ? args.join("  ·  ") : "No decoded args";
+}
+
 export default async function TokenReportPage({
   params,
 }: {
@@ -65,8 +82,8 @@ export default async function TokenReportPage({
           <strong>Risk report unavailable.</strong>
           <span>
             The live data source could not be reached for{" "}
-            <span className="mono">{token.address}</span>. Check the CDP
-            configuration and try again, or run in mock mode.
+            <span className="mono">{token.address}</span>. Check the CDP/Supabase
+            configuration, then run the refresh workflow again.
           </span>
         </div>
       </div>
@@ -81,9 +98,10 @@ export default async function TokenReportPage({
 
       <div className={styles.header}>
         <div>
+          <p className="eyebrow">B20 issuer-control report</p>
           <h1 className={styles.title}>
-            {token.name}
-            <span className={styles.symbol}>{token.symbol}</span>
+            {token.name || "Unnamed B20"}
+            <span className={styles.symbol}>{token.symbol || "—"}</span>
           </h1>
           <div className={`mono ${styles.addr}`}>{token.address}</div>
         </div>
@@ -98,6 +116,25 @@ export default async function TokenReportPage({
             <span className={styles.scoreMax}> / 100</span>
           </div>
           <RiskBadge level={report.level} />
+        </div>
+      </div>
+
+      <div className={styles.metaGrid}>
+        <div>
+          <span>Data source</span>
+          <strong>{dataModeLabel()}</strong>
+        </div>
+        <div>
+          <span>Network</span>
+          <strong>{networkLabel()}</strong>
+        </div>
+        <div>
+          <span>Token created</span>
+          <strong>{formatDate(token.createdAt)}</strong>
+        </div>
+        <div>
+          <span>Report generated</span>
+          <strong>{formatDate(report.generatedAt)}</strong>
         </div>
       </div>
 
@@ -128,9 +165,7 @@ export default async function TokenReportPage({
         <div className={styles.card}>
           <h2>Risk flags</h2>
           {report.flags.length === 0 ? (
-            <p style={{ color: "var(--text-dim)", fontSize: 14, margin: 0 }}>
-              No risk flags detected.
-            </p>
+            <p className={styles.mutedText}>No risk flags detected.</p>
           ) : (
             report.flags.map((flag) => (
               <div key={flag.id} className={styles.flag}>
@@ -173,7 +208,7 @@ export default async function TokenReportPage({
                 <div className={styles.roleName}>{role.role}</div>
                 {role.holders.length > 0 && (
                   <div className={styles.roleHolders}>
-                    {role.holders.join(", ")}
+                    {role.holders.map(shortenAddress).join(", ")}
                   </div>
                 )}
               </div>
@@ -190,9 +225,12 @@ export default async function TokenReportPage({
       </div>
 
       <div className={`${styles.card} ${styles.timeline}`}>
-        <h2>Event timeline</h2>
+        <div className={styles.cardHeader}>
+          <h2>Event timeline</h2>
+          <span>{report.timeline.length} events</span>
+        </div>
         {report.timeline.length === 0 ? (
-          <p style={{ color: "var(--text-dim)", fontSize: 14, margin: 0 }}>
+          <p className={styles.mutedText}>
             No matching B20 events observed for this token.
           </p>
         ) : (
@@ -206,13 +244,10 @@ export default async function TokenReportPage({
                 <div className={styles.eventName}>{event.name}</div>
                 <div className={styles.eventMeta}>
                   {formatDate(event.timestamp)} · block{" "}
-                  {event.blockNumber.toLocaleString("en-US")}
+                  {event.blockNumber.toLocaleString("en-US")} · tx{" "}
+                  {shortenAddress(event.transactionHash)}
                 </div>
-                <div className={styles.eventArgs}>
-                  {Object.entries(event.args)
-                    .map(([k, v]) => `${k}: ${v}`)
-                    .join("  ·  ")}
-                </div>
+                <div className={styles.eventArgs}>{formatEventArgs(event)}</div>
               </div>
             </div>
           ))
@@ -220,11 +255,10 @@ export default async function TokenReportPage({
       </div>
 
       <div className={styles.disclaimer}>
-        This score estimates issuer-control and operational risk from observed
-        events. Regulated tokens may intentionally use pause, freeze, blocklist,
-        or supply controls — flags describe capabilities, not intent. Not a
-        price prediction or investment advice. Report generated{" "}
-        {formatDate(report.generatedAt)}.
+        This report estimates issuer-control and operational risk from observed
+        B20 events. Regulated tokens may intentionally use pause, freeze,
+        blocklist, or supply controls. Flags describe capabilities, not intent.
+        Not a price prediction or investment advice.
       </div>
     </div>
   );
