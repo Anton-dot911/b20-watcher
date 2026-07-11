@@ -47,7 +47,6 @@
   max-width: 72ch;
 }
 
-/* Metadata --------------------------------------------------------------- */
 .metaGrid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
@@ -90,7 +89,6 @@
   margin-top: 6px;
 }
 
-/* Score panel ------------------------------------------------------------- */
 .scorePanel {
   display: flex;
   align-items: center;
@@ -114,7 +112,6 @@
   font-weight: 600;
 }
 
-/* Grid -------------------------------------------------------------------- */
 .grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -133,6 +130,7 @@
   border-radius: var(--radius);
   background: var(--bg-elev);
   padding: 20px;
+  overflow: hidden;
 }
 
 .card h2 {
@@ -167,7 +165,6 @@
   margin: 0;
 }
 
-/* Stats ------------------------------------------------------------------- */
 .statRow {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
@@ -200,7 +197,6 @@
   margin-top: 4px;
 }
 
-/* Flags ------------------------------------------------------------------- */
 .flag {
   display: flex;
   gap: 12px;
@@ -225,6 +221,7 @@
 
 .flagBody {
   flex: 1;
+  min-width: 0;
 }
 
 .flagTop {
@@ -264,7 +261,6 @@
   vertical-align: middle;
 }
 
-/* Roles ------------------------------------------------------------------- */
 .role {
   display: flex;
   align-items: center;
@@ -285,10 +281,14 @@
 }
 
 .roleHolders {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
   font-size: 11.5px;
   color: var(--text-faint);
   margin-top: 3px;
   font-family: var(--mono);
+  overflow-wrap: anywhere;
 }
 
 .pill {
@@ -311,7 +311,6 @@
   background: var(--bg-elev-2);
 }
 
-/* Timeline ---------------------------------------------------------------- */
 .timeline {
   margin-top: 40px;
 }
@@ -321,6 +320,7 @@
   gap: 14px;
   padding: 14px 0;
   border-bottom: 1px solid var(--border);
+  min-width: 0;
 }
 
 .event:last-child {
@@ -344,6 +344,7 @@
 .eventMain {
   flex: 1;
   min-width: 0;
+  max-width: 100%;
 }
 
 .eventName {
@@ -355,14 +356,41 @@
   font-size: 12px;
   color: var(--text-faint);
   margin-top: 3px;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .eventArgs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  max-width: 100%;
   font-family: var(--mono);
   font-size: 12px;
   color: var(--text-dim);
   margin-top: 6px;
+  white-space: normal;
+  overflow-wrap: anywhere;
   word-break: break-word;
+}
+
+.argItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+}
+
+.argKey {
+  color: var(--text-faint);
+}
+
+.copyValue {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  overflow-wrap: anywhere;
 }
 
 .disclaimer {
