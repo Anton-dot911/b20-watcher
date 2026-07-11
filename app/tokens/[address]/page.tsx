@@ -5,6 +5,10 @@ import { CopyValue } from "@/components/CopyValue";
 import { RiskBadge } from "@/components/RiskBadge";
 import { normalizeAddress } from "@/lib/address";
 import { B20_NETWORK, dataModeLabel } from "@/lib/config";
+import {
+  explainRiskScore,
+  formatScoreReason,
+} from "@/lib/score-explanation";
 import { getB20RiskReport, getB20Token } from "@/lib/data-source";
 import type { B20Event, RiskLevel, RiskSeverity } from "@/lib/types";
 import styles from "./page.module.css";
@@ -129,6 +133,8 @@ export default async function TokenReportPage({
     );
   }
 
+  const scoreExplanation = explainRiskScore(report);
+
   return (
     <div className="container">
       <Link href="/" className={styles.back}>
@@ -181,6 +187,18 @@ export default async function TokenReportPage({
 
       <p className={styles.summary}>{report.summary}</p>
 
+      <div className={styles.scoreBreakdown}>
+        <div>
+          <span className={styles.breakdownLabel}>Main reason</span>
+          <strong>{formatScoreReason(scoreExplanation.mainReason)}</strong>
+          <p>{scoreExplanation.mainReason.description}</p>
+        </div>
+        <div className={styles.breakdownTotal}>
+          <span>Score</span>
+          <strong>{scoreExplanation.score}/100</strong>
+        </div>
+      </div>
+
       <div className={styles.statRow}>
         <div className={styles.stat}>
           <div className={styles.statValue}>{report.stats.totalEvents}</div>
@@ -203,6 +221,28 @@ export default async function TokenReportPage({
       </div>
 
       <div className={styles.grid}>
+        <div className={styles.card}>
+          <h2>Score breakdown</h2>
+          {scoreExplanation.hasPositiveReasons ? (
+            <>
+              {scoreExplanation.reasons.map((reason) => (
+                <div key={reason.title} className={styles.breakdownItem}>
+                  <div>
+                    <strong>{reason.title}</strong>
+                    <p>{reason.description}</p>
+                  </div>
+                  <span>+{reason.points}</span>
+                </div>
+              ))}
+              <p className={styles.breakdownNote}>
+                Score is the capped sum of score-bearing risk flags. Maximum displayed score is 100.
+              </p>
+            </>
+          ) : (
+            <p className={styles.mutedText}>No score-bearing flags detected.</p>
+          )}
+        </div>
+
         <div className={styles.card}>
           <h2>Risk flags</h2>
           {report.flags.length === 0 ? (
@@ -240,37 +280,37 @@ export default async function TokenReportPage({
             ))
           )}
         </div>
+      </div>
 
-        <div className={styles.card}>
-          <h2>Active roles</h2>
-          {report.activeRoles.map((role) => (
-            <div key={role.role} className={styles.role}>
-              <div>
-                <div className={styles.roleName}>{role.role}</div>
-                {role.holders.length > 0 && (
-                  <div className={styles.roleHolders}>
-                    {role.holders.map((holder) => (
-                      <CopyValue
-                        key={holder}
-                        value={holder}
-                        label={`${role.role} holder`}
-                        compact
-                        className={styles.copyValue}
-                      />
-                    ))}
-                  </div>
-                )}
-              </div>
-              <span
-                className={`${styles.pill} ${
-                  role.active ? styles.pillActive : styles.pillInactive
-                }`}
-              >
-                {role.active ? "Active" : "None"}
-              </span>
+      <div className={styles.card}>
+        <h2>Active roles</h2>
+        {report.activeRoles.map((role) => (
+          <div key={role.role} className={styles.role}>
+            <div>
+              <div className={styles.roleName}>{role.role}</div>
+              {role.holders.length > 0 && (
+                <div className={styles.roleHolders}>
+                  {role.holders.map((holder) => (
+                    <CopyValue
+                      key={holder}
+                      value={holder}
+                      label={`${role.role} holder`}
+                      compact
+                      className={styles.copyValue}
+                    />
+                  ))}
+                </div>
+              )}
             </div>
-          ))}
-        </div>
+            <span
+              className={`${styles.pill} ${
+                role.active ? styles.pillActive : styles.pillInactive
+              }`}
+            >
+              {role.active ? "Active" : "None"}
+            </span>
+          </div>
+        ))}
       </div>
 
       <div className={`${styles.card} ${styles.timeline}`}>
