@@ -289,6 +289,94 @@
   line-height: 1.35;
 }
 
+.mobileCardList {
+  display: none;
+}
+
+.mobileCard {
+  padding: 18px 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.mobileCard:last-child {
+  border-bottom: none;
+}
+
+.mobileCardHeader,
+.mobileCardFooter {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.mobileCardAddress,
+.mobileReason {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 14px;
+}
+
+.mobileCardAddress span,
+.mobileReason span,
+.mobileCardGrid span,
+.mobileCardFooter span {
+  color: var(--text-faint);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.mobileCardGrid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.mobileCardGrid > div {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px;
+  background: var(--bg);
+}
+
+.mobileCardGrid strong {
+  display: block;
+  margin-top: 6px;
+  color: var(--text);
+  font-size: 22px;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.mobileCardGrid small {
+  color: var(--text-faint);
+  font-size: 12px;
+  margin-left: 2px;
+}
+
+.mobileReason strong {
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.35;
+}
+
+.mobileCardFooter {
+  align-items: center;
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
+.mobileCardFooter span {
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 500;
+}
+
 .viewLink {
   color: var(--accent);
   font-weight: 600;
@@ -318,4 +406,14 @@
 .emptyState strong {
   color: var(--text);
   font-size: 15px;
+}
+
+@media (max-width: 720px) {
+  .tableScroll {
+    display: none;
+  }
+
+  .mobileCardList {
+    display: block;
+  }
 }
