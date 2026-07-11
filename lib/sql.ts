@@ -8,6 +8,8 @@
 //     raw user input, so a caller cannot inject a table name.
 //   * Token/factory addresses are validated as 20-byte hex before they are
 //     interpolated, so they cannot carry SQL metacharacters.
+//   * Addresses are normalized to lowercase because CDP stores EVM addresses
+//     in lowercase inside the events tables.
 //   * Row limits are clamped to safe ranges.
 
 import { isValidAddress } from "./address";
@@ -103,9 +105,10 @@ export function discoverB20TokensSql(
 ): string {
   const table = tableFor(network);
   const safeLimit = clampLimit(limit, 1, 100);
-  const factory = isValidAddress(factoryAddress)
+  const factory = (isValidAddress(factoryAddress)
     ? factoryAddress
-    : DEFAULT_B20_FACTORY_ADDRESS;
+    : DEFAULT_B20_FACTORY_ADDRESS
+  ).toLowerCase();
 
   return `SELECT
   block_timestamp,
