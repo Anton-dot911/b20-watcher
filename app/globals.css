@@ -47,6 +47,10 @@ a {
   text-decoration: none;
 }
 
+button {
+  font: inherit;
+}
+
 .container {
   max-width: var(--maxw);
   margin: 0 auto;
@@ -146,4 +150,28 @@ a {
   font-size: 12px;
   font-weight: 600;
   color: var(--text-faint);
+}
+
+.copy-value-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 6px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg-elev-2);
+  color: var(--text-faint);
+  padding: 2px 7px;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.4;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  vertical-align: middle;
+}
+
+.copy-value-button:hover {
+  color: var(--text);
+  border-color: var(--border-strong);
 }
