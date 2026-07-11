@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { CopyValue } from "@/components/CopyValue";
 import { RiskBadge } from "@/components/RiskBadge";
-import { normalizeAddress, shortenAddress } from "@/lib/address";
+import { normalizeAddress } from "@/lib/address";
 import { B20_NETWORK, dataModeLabel } from "@/lib/config";
 import { getB20RiskReport, getB20Token } from "@/lib/data-source";
 import type { B20Event, RiskLevel, RiskSeverity } from "@/lib/types";
@@ -41,16 +42,37 @@ function networkLabel(): string {
   return B20_NETWORK === "base_sepolia" ? "Base Sepolia" : "Base";
 }
 
-function formatEventArgs(event: B20Event): string {
-  const args = Object.entries(event.args)
-    .filter(([, value]) => value !== "" && value != null)
-    .map(([key, value]) => {
-      const text = String(value);
-      const display = normalizeAddress(text) ? shortenAddress(text) : text;
-      return `${key}: ${display}`;
-    });
+function formatEventValue(value: unknown, label: string, compact = true) {
+  const text = String(value);
+  if (normalizeAddress(text) || /^0x[0-9a-fA-F]{16,}$/.test(text)) {
+    return (
+      <CopyValue
+        value={text}
+        label={label}
+        compact={compact}
+        className={styles.copyValue}
+      />
+    );
+  }
 
-  return args.length > 0 ? args.join("  ·  ") : "No decoded args";
+  return <span>{text}</span>;
+}
+
+function renderEventArgs(event: B20Event) {
+  const args = Object.entries(event.args).filter(
+    ([, value]) => value !== "" && value != null
+  );
+
+  if (args.length === 0) {
+    return <span>No decoded args</span>;
+  }
+
+  return args.map(([key, value]) => (
+    <span key={key} className={styles.argItem}>
+      <span className={styles.argKey}>{key}:</span>
+      {formatEventValue(value, key)}
+    </span>
+  ));
 }
 
 export default async function TokenReportPage({
@@ -82,8 +104,9 @@ export default async function TokenReportPage({
           <strong>Risk report unavailable.</strong>
           <span>
             The live data source could not be reached for{" "}
-            <span className="mono">{token.address}</span>. Check the CDP/Supabase
-            configuration, then run the refresh workflow again.
+            <CopyValue value={token.address} label="token address" className="mono" />.
+            Check the CDP/Supabase configuration, then run the refresh workflow
+            again.
           </span>
         </div>
       </div>
@@ -103,7 +126,9 @@ export default async function TokenReportPage({
             {token.name || "Unnamed B20"}
             <span className={styles.symbol}>{token.symbol || "—"}</span>
           </h1>
-          <div className={`mono ${styles.addr}`}>{token.address}</div>
+          <div className={`mono ${styles.addr}`}>
+            <CopyValue value={token.address} label="token address" />
+          </div>
         </div>
         <div className={styles.scorePanel}>
           <div>
@@ -208,7 +233,15 @@ export default async function TokenReportPage({
                 <div className={styles.roleName}>{role.role}</div>
                 {role.holders.length > 0 && (
                   <div className={styles.roleHolders}>
-                    {role.holders.map(shortenAddress).join(", ")}
+                    {role.holders.map((holder) => (
+                      <CopyValue
+                        key={holder}
+                        value={holder}
+                        label={`${role.role} holder`}
+                        compact
+                        className={styles.copyValue}
+                      />
+                    ))}
                   </div>
                 )}
               </div>
@@ -245,9 +278,14 @@ export default async function TokenReportPage({
                 <div className={styles.eventMeta}>
                   {formatDate(event.timestamp)} · block{" "}
                   {event.blockNumber.toLocaleString("en-US")} · tx{" "}
-                  {shortenAddress(event.transactionHash)}
+                  <CopyValue
+                    value={event.transactionHash}
+                    label="transaction hash"
+                    compact
+                    className={styles.copyValue}
+                  />
                 </div>
-                <div className={styles.eventArgs}>{formatEventArgs(event)}</div>
+                <div className={styles.eventArgs}>{renderEventArgs(event)}</div>
               </div>
             </div>
           ))
