@@ -30,14 +30,27 @@ export const DEFAULT_REFRESH_LIMIT = 20;
 
 const TIMELINE_LIMIT = 5000;
 
+export interface RefreshError {
+  stage: "discovery" | "tokens-upsert" | "timeline" | "events-upsert" | "risk-report";
+  tokenAddress?: string;
+  message: string;
+}
+
 /** Counts returned by a refresh run. */
 export interface RefreshResult {
   network: B20Network;
   tokens: number;
   events: number;
   reports: number;
+  partial: boolean;
+  errors: RefreshError[];
   /** Present for a single-token refresh. */
   tokenAddress?: string;
+}
+
+function sanitizeRefreshError(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  return message.replace(/\s+/g, " ").slice(0, 240);
 }
 
 /** Fetches recent B20 token snapshots from CDP SQL. */
@@ -73,8 +86,44 @@ export async function refreshRecentB20Tokens(
       ? Math.min(Math.floor(limit), 100)
       : DEFAULT_REFRESH_LIMIT;
 
-  const tokens = await fetchRecentTokensFromCdp(safeLimit);
-  await upsertTokens(tokens);
+  let tokens: B20Token[];
+  try {
+    tokens = await fetchRecentTokensFromCdp(safeLimit);
+  } catch (error) {
+    return {
+      network: B20_NETWORK,
+      tokens: 0,
+      events: 0,
+      reports: 0,
+      partial: true,
+      errors: [
+        {
+          stage: "discovery",
+          message: sanitizeRefreshError(error),
+        },
+      ],
+    };
+  }
+
+  const errors: RefreshError[] = [];
+
+  try {
+    await upsertTokens(tokens);
+  } catch (error) {
+    return {
+      network: B20_NETWORK,
+      tokens: tokens.length,
+      events: 0,
+      reports: 0,
+      partial: true,
+      errors: [
+        {
+          stage: "tokens-upsert",
+          message: sanitizeRefreshError(error),
+        },
+      ],
+    };
+  }
 
   let eventCount = 0;
   let reportCount = 0;
@@ -83,13 +132,41 @@ export async function refreshRecentB20Tokens(
     const address = normalizeAddress(token.address);
     if (!address) continue;
 
-    const events = await fetchTokenEventsFromCdp(address);
-    await upsertEvents(address, events);
-    eventCount += events.length;
+    let events: B20Event[] = [];
+    try {
+      events = await fetchTokenEventsFromCdp(address);
+    } catch (error) {
+      errors.push({
+        stage: "timeline",
+        tokenAddress: address,
+        message: sanitizeRefreshError(error),
+      });
+      continue;
+    }
 
-    const report = buildRiskReport(address, events);
-    await upsertRiskReport(report);
-    reportCount += 1;
+    try {
+      await upsertEvents(address, events);
+      eventCount += events.length;
+    } catch (error) {
+      errors.push({
+        stage: "events-upsert",
+        tokenAddress: address,
+        message: sanitizeRefreshError(error),
+      });
+      continue;
+    }
+
+    try {
+      const report = buildRiskReport(address, events);
+      await upsertRiskReport(report);
+      reportCount += 1;
+    } catch (error) {
+      errors.push({
+        stage: "risk-report",
+        tokenAddress: address,
+        message: sanitizeRefreshError(error),
+      });
+    }
   }
 
   return {
@@ -97,6 +174,8 @@ export async function refreshRecentB20Tokens(
     tokens: tokens.length,
     events: eventCount,
     reports: reportCount,
+    partial: errors.length > 0,
+    errors,
   };
 }
 
@@ -138,6 +217,8 @@ export async function refreshTokenRisk(address: string): Promise<RefreshResult> 
     tokens: 1,
     events: events.length,
     reports: 1,
+    partial: false,
+    errors: [],
     tokenAddress: normalized,
   };
 }
