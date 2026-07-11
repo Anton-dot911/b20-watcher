@@ -220,7 +220,7 @@
 .tableScroll table {
   width: 100%;
   border-collapse: collapse;
-  min-width: 860px;
+  min-width: 980px;
 }
 
 .tableScroll thead th {
@@ -279,6 +279,14 @@
   font-variant-numeric: tabular-nums;
   font-weight: 700;
   font-size: 15px;
+}
+
+.reasonText {
+  display: inline-block;
+  max-width: 220px;
+  color: var(--text-dim);
+  font-size: 13px;
+  line-height: 1.35;
 }
 
 .viewLink {
