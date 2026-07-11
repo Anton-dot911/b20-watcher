@@ -1,20 +1,10 @@
-import Link from "next/link";
-
-import { RiskBadge } from "@/components/RiskBadge";
-import { shortenAddress } from "@/lib/address";
+import { TokenSearchTable } from "@/components/TokenSearchTable";
 import { B20_NETWORK, dataModeLabel, MOCK_MODE } from "@/lib/config";
 import { getB20RiskReport, listB20Tokens } from "@/lib/data-source";
-import type { B20Token, RiskLevel, RiskReport } from "@/lib/types";
+import type { B20Token, RiskReport } from "@/lib/types";
 import styles from "./page.module.css";
 
 export const dynamic = "force-dynamic";
-
-const SCORE_COLOR: Record<RiskLevel, string> = {
-  low: "var(--low)",
-  moderate: "var(--moderate)",
-  high: "var(--high)",
-  critical: "var(--critical)",
-};
 
 type Row = { token: B20Token; report: RiskReport | null };
 
@@ -131,87 +121,8 @@ export default async function HomePage() {
                 CDP/Supabase configuration, then run the refresh workflow again.
               </span>
             </div>
-          ) : rows.length === 0 ? (
-            <div className={styles.emptyState}>
-              <strong>No cached B20 tokens yet.</strong>
-              <span>
-                Run the Refresh B20 Cache workflow. In live cached mode, this page
-                reads from Supabase and does not trigger refreshes itself.
-              </span>
-            </div>
           ) : (
-            <div className={styles.tableScroll}>
-              <table>
-                <thead>
-                  <tr>
-                    <th>Token</th>
-                    <th>Address</th>
-                    <th>Events</th>
-                    <th>Risk score</th>
-                    <th>Level</th>
-                    <th>Generated</th>
-                    <th></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.map(({ token, report }) => (
-                    <tr key={token.address} className={styles.row}>
-                      <td>
-                        <div className={styles.tokenName}>{token.name || "Unnamed B20"}</div>
-                        <div className={styles.tokenSymbol}>{token.symbol || "—"}</div>
-                      </td>
-                      <td>
-                        <span className={`mono ${styles.addr}`}>
-                          {shortenAddress(token.address)}
-                        </span>
-                      </td>
-                      <td>
-                        <span className={styles.count}>
-                          {report ? report.stats.totalEvents : "—"}
-                        </span>
-                      </td>
-                      <td>
-                        <div className={styles.scoreCell}>
-                          {report ? (
-                            <>
-                              <span
-                                className={styles.scoreNum}
-                                style={{ color: SCORE_COLOR[report.level] }}
-                              >
-                                {report.score}
-                              </span>
-                              <span className={styles.count}>/ 100</span>
-                            </>
-                          ) : (
-                            <span className={styles.count}>unavailable</span>
-                          )}
-                        </div>
-                      </td>
-                      <td>
-                        {report ? (
-                          <RiskBadge level={report.level} size="sm" />
-                        ) : (
-                          <span className={styles.count}>—</span>
-                        )}
-                      </td>
-                      <td>
-                        <span className={styles.count}>
-                          {report ? formatUtc(report.generatedAt) : "—"}
-                        </span>
-                      </td>
-                      <td style={{ textAlign: "right" }}>
-                        <Link
-                          href={`/tokens/${token.address}`}
-                          className={styles.viewLink}
-                        >
-                          View report
-                        </Link>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <TokenSearchTable rows={rows} />
           )}
         </div>
       </section>
