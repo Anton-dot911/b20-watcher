@@ -79,6 +79,33 @@ interface RiskReportRow {
   updated_at?: string;
 }
 
+// --- JSONB safety -----------------------------------------------------------
+
+/**
+ * Postgres JSONB rejects the zero byte, even when it arrives through JSON escape
+ * sequences such as \u0000. CDP event parameters may contain arbitrary metadata,
+ * so sanitize JSON payloads before upserting them into Supabase JSONB columns.
+ */
+export function sanitizeJsonbValue<T>(value: T): T {
+  if (typeof value === "string") {
+    return value.replace(/\u0000/g, "") as T;
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((item) => sanitizeJsonbValue(item)) as T;
+  }
+
+  if (value && typeof value === "object") {
+    const clean: Record<string, unknown> = {};
+    for (const [key, nested] of Object.entries(value)) {
+      clean[key] = sanitizeJsonbValue(nested);
+    }
+    return clean as T;
+  }
+
+  return value;
+}
+
 // --- Row <-> internal type conversions --------------------------------------
 
 /** Converts a `b20_tokens` row into the internal `B20Token` shape. */
@@ -255,7 +282,7 @@ export async function upsertEvents(
     transaction_hash: event.transactionHash,
     block_number: event.blockNumber,
     log_index: event.logIndex,
-    args: event.args ?? {},
+    args: sanitizeJsonbValue(event.args ?? {}),
   }));
 
   const supabase = getSupabaseServerClient();
@@ -283,10 +310,10 @@ export async function upsertRiskReport(report: RiskReport): Promise<void> {
     score: report.score,
     level: report.level,
     summary: report.summary,
-    flags: report.flags,
-    active_roles: report.activeRoles,
-    stats: report.stats,
-    timeline: report.timeline,
+    flags: sanitizeJsonbValue(report.flags),
+    active_roles: sanitizeJsonbValue(report.activeRoles),
+    stats: sanitizeJsonbValue(report.stats),
+    timeline: sanitizeJsonbValue(report.timeline),
     generated_at: report.generatedAt,
     updated_at: new Date().toISOString(),
   };

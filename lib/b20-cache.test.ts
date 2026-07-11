@@ -6,6 +6,7 @@ import {
   rowToEvent,
   rowToRiskReport,
   rowToToken,
+  sanitizeJsonbValue,
   TOKEN_UPSERT_CONFLICT_TARGET,
 } from "./b20-cache";
 
@@ -27,6 +28,24 @@ describe("Supabase cache conflict targets", () => {
     expect(RISK_REPORT_UPSERT_CONFLICT_TARGET).toBe(
       "network,token_address"
     );
+  });
+});
+
+describe("sanitizeJsonbValue", () => {
+  it("removes zero bytes from strings before JSONB upsert", () => {
+    expect(sanitizeJsonbValue("hello\u0000world")).toBe("helloworld");
+  });
+
+  it("sanitizes nested arrays and objects", () => {
+    const value = {
+      title: "A\u0000B",
+      nested: [{ key: "C\u0000D" }, 1, true, null],
+    };
+
+    expect(sanitizeJsonbValue(value)).toEqual({
+      title: "AB",
+      nested: [{ key: "CD" }, 1, true, null],
+    });
   });
 });
 
