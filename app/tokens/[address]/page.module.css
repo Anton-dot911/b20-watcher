@@ -393,6 +393,21 @@
   overflow-wrap: anywhere;
 }
 
+.unreadableValue {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg-elev-2);
+  color: var(--text-faint);
+  padding: 2px 8px;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.4;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
 .disclaimer {
   margin-top: 32px;
   padding: 14px 16px;
