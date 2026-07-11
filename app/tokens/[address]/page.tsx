@@ -42,8 +42,24 @@ function networkLabel(): string {
   return B20_NETWORK === "base_sepolia" ? "Base Sepolia" : "Base";
 }
 
+function isLikelyUnreadable(text: string): boolean {
+  if (text.includes("�")) return true;
+
+  const printable = text.replace(/[\x20-\x7e]/g, "").length;
+  return text.length > 0 && printable / text.length > 0.12;
+}
+
 function formatEventValue(value: unknown, label: string, compact = true) {
   const text = String(value);
+
+  if (label === "role" && isLikelyUnreadable(text)) {
+    return <span className={styles.unreadableValue}>Unknown role</span>;
+  }
+
+  if (isLikelyUnreadable(text)) {
+    return <span className={styles.unreadableValue}>Unreadable value</span>;
+  }
+
   if (normalizeAddress(text) || /^0x[0-9a-fA-F]{16,}$/.test(text)) {
     return (
       <CopyValue
