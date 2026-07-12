@@ -6,7 +6,10 @@
 import "server-only";
 
 import { CDP_SQL_CACHE_MAX_AGE_MS } from "./config";
+import { resolveRole } from "./roles";
 import type { B20Event, B20EventName, B20Token } from "./types";
+
+export { resolveRole } from "./roles";
 
 const CDP_SQL_ENDPOINT =
   "https://api.cdp.coinbase.com/platform/v2/data/query/run";
@@ -79,39 +82,11 @@ export async function runCdpSql<T>(sql: string): Promise<T[]> {
 
 // --- Row normalization ------------------------------------------------------
 
-const DEFAULT_ADMIN_ROLE_HASH = `0x${"0".repeat(64)}`;
-
-const KNOWN_ROLE_NAMES: ReadonlySet<string> = new Set([
-  "DEFAULT_ADMIN_ROLE",
-  "MINT_ROLE",
-  "BURN_ROLE",
-  "BURN_BLOCKED_ROLE",
-  "PAUSE_ROLE",
-  "UNPAUSE_ROLE",
-  "METADATA_ROLE",
-  "OPERATOR_ROLE",
-]);
-
 const ROLE_EVENT_NAMES: ReadonlySet<string> = new Set([
   "RoleGranted",
   "RoleRevoked",
   "RoleAdminChanged",
 ]);
-
-/**
- * Resolves a raw role value to a known role name when possible.
- *
- * For TASK-002 this only decodes the well-known zero-hash admin role and passes
- * through already-decoded role names. Any other value (e.g. a keccak role hash
- * we cannot decode yet) is preserved verbatim; the risk engine ignores unknown
- * roles rather than crashing.
- */
-export function resolveRole(raw: string): string {
-  if (!raw) return raw;
-  if (raw.toLowerCase() === DEFAULT_ADMIN_ROLE_HASH) return "DEFAULT_ADMIN_ROLE";
-  if (KNOWN_ROLE_NAMES.has(raw)) return raw;
-  return raw;
-}
 
 function toNumber(value: unknown): number {
   const n = Number(value);
@@ -191,8 +166,8 @@ export function normalizeB20CreatedRow(row: CdpB20CreatedRow): B20Token {
 /**
  * Normalizes a CDP timeline row into the internal `B20Event` shape. Returns
  * null when the row has neither an event name nor a signature to derive one
- * from. Role values on role events are resolved to known role names where
- * possible; unknown roles are preserved verbatim.
+ * from. Known role hashes on role events are decoded to role names; unknown
+ * roles are preserved verbatim and ignored by scoring.
  */
 export function normalizeEventRow(row: CdpEventRow): B20Event | null {
   const signature =
@@ -204,7 +179,7 @@ export function normalizeEventRow(row: CdpEventRow): B20Event | null {
 
   const args = toArgs(parseParameters(row.parameters));
   if (ROLE_EVENT_NAMES.has(name) && args.role != null) {
-    args.role = resolveRole(String(args.role));
+    args.role = resolveRole(args.role);
   }
 
   return {
