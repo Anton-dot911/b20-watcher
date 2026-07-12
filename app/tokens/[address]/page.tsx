@@ -3,13 +3,17 @@ import { notFound } from "next/navigation";
 
 import { CopyValue } from "@/components/CopyValue";
 import { RiskBadge } from "@/components/RiskBadge";
-import { normalizeAddress } from "@/lib/address";
 import { B20_NETWORK, dataModeLabel } from "@/lib/config";
+import { getB20RiskReport, getB20Token } from "@/lib/data-source";
+import {
+  formatEventNumber,
+  presentEvent,
+  type PresentedEventArg,
+} from "@/lib/event-presentation";
 import {
   explainRiskScore,
   formatScoreReason,
 } from "@/lib/score-explanation";
-import { getB20RiskReport, getB20Token } from "@/lib/data-source";
 import type { B20Event, RiskLevel, RiskSeverity } from "@/lib/types";
 import styles from "./page.module.css";
 
@@ -46,51 +50,44 @@ function networkLabel(): string {
   return B20_NETWORK === "base_sepolia" ? "Base Sepolia" : "Base";
 }
 
-function isLikelyUnreadable(text: string): boolean {
-  if (text.includes("�")) return true;
-
-  const printable = text.replace(/[\x20-\x7e]/g, "").length;
-  return text.length > 0 && printable / text.length > 0.12;
-}
-
-function formatEventValue(value: unknown, label: string, compact = true) {
-  const text = String(value);
-
-  if (label === "role" && isLikelyUnreadable(text)) {
-    return <span className={styles.unreadableValue}>Unknown role</span>;
+function formatEventValue(arg: PresentedEventArg) {
+  if (arg.kind === "unknown") {
+    return (
+      <span className={styles.unreadableValue}>
+        {arg.key === "role" ? "Unknown role" : "Unreadable value"}
+      </span>
+    );
   }
 
-  if (isLikelyUnreadable(text)) {
-    return <span className={styles.unreadableValue}>Unreadable value</span>;
-  }
-
-  if (normalizeAddress(text) || /^0x[0-9a-fA-F]{16,}$/.test(text)) {
+  if (arg.kind === "address" || arg.kind === "hash") {
     return (
       <CopyValue
-        value={text}
-        label={label}
-        compact={compact}
+        value={String(arg.value)}
+        label={arg.label.toLowerCase()}
+        compact
         className={styles.copyValue}
       />
     );
   }
 
-  return <span>{text}</span>;
+  if (arg.kind === "number") {
+    return <span>{formatEventNumber(arg.value)}</span>;
+  }
+
+  return <span>{String(arg.value)}</span>;
 }
 
 function renderEventArgs(event: B20Event) {
-  const args = Object.entries(event.args).filter(
-    ([, value]) => value !== "" && value != null
-  );
+  const presented = presentEvent(event);
 
-  if (args.length === 0) {
+  if (presented.args.length === 0) {
     return <span>No decoded args</span>;
   }
 
-  return args.map(([key, value]) => (
-    <span key={key} className={styles.argItem}>
-      <span className={styles.argKey}>{key}:</span>
-      {formatEventValue(value, key)}
+  return presented.args.map((arg) => (
+    <span key={arg.key} className={styles.argItem}>
+      <span className={styles.argKey}>{arg.label}:</span>
+      {formatEventValue(arg)}
     </span>
   ));
 }
@@ -101,7 +98,7 @@ export default async function TokenReportPage({
   params: Promise<{ address: string }>;
 }) {
   const { address } = await params;
-  const normalized = normalizeAddress(address);
+  const normalized = address.match(/^0x[0-9a-fA-F]{40}$/) ? address.toLowerCase() : null;
   if (!normalized) notFound();
 
   const token = await getB20Token(normalized);
@@ -323,28 +320,33 @@ export default async function TokenReportPage({
             No matching B20 events observed for this token.
           </p>
         ) : (
-          report.timeline.map((event, i) => (
-            <div
-              key={`${event.transactionHash}-${event.logIndex}-${i}`}
-              className={styles.event}
-            >
-              <div className={styles.eventDot} />
-              <div className={styles.eventMain}>
-                <div className={styles.eventName}>{event.name}</div>
-                <div className={styles.eventMeta}>
-                  {formatDate(event.timestamp)} · block{" "}
-                  {event.blockNumber.toLocaleString("en-US")} · tx{" "}
-                  <CopyValue
-                    value={event.transactionHash}
-                    label="transaction hash"
-                    compact
-                    className={styles.copyValue}
-                  />
+          report.timeline.map((event, i) => {
+            const presented = presentEvent(event);
+
+            return (
+              <div
+                key={`${event.transactionHash}-${event.logIndex}-${i}`}
+                className={styles.event}
+              >
+                <div className={styles.eventDot} />
+                <div className={styles.eventMain}>
+                  <div className={styles.eventName}>{presented.title}</div>
+                  <div className={styles.eventDescription}>{presented.description}</div>
+                  <div className={styles.eventMeta}>
+                    {formatDate(event.timestamp)} · block{" "}
+                    {event.blockNumber.toLocaleString("en-US")} · tx{" "}
+                    <CopyValue
+                      value={event.transactionHash}
+                      label="transaction hash"
+                      compact
+                      className={styles.copyValue}
+                    />
+                  </div>
+                  <div className={styles.eventArgs}>{renderEventArgs(event)}</div>
                 </div>
-                <div className={styles.eventArgs}>{renderEventArgs(event)}</div>
               </div>
-            </div>
-          ))
+            );
+          })
         )}
       </div>
 
