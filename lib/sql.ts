@@ -131,10 +131,6 @@ LIMIT ${safeLimit}`;
 /**
  * Builds the token event-timeline query for a single token.
  *
- * `topic1` is selected as `role_topic` so role decoding can recover the
- * canonical indexed bytes32 role hash when CDP's decoded parameters.role is
- * empty or unreadable.
- *
  * @param network      validated network enum (selects the SQL table)
  * @param tokenAddress token contract; MUST be a valid address or this throws
  * @param limit        desired row count, clamped to 1–5000
@@ -158,7 +154,6 @@ export function b20TokenEventsSql(
   event_name,
   event_signature,
   parameters,
-  topic1 AS role_topic,
   block_number,
   log_index
 FROM ${table}
