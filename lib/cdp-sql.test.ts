@@ -8,6 +8,7 @@ import {
   type CdpEventRow,
 } from "./cdp-sql";
 import { buildRiskReport } from "./risk";
+import { B20_ROLE_HASHES } from "./roles";
 
 const ADDR = "0xb200000000000000000000000000000000000001";
 const HOLDER = "0xa11ce00000000000000000000000000000000abc";
@@ -78,6 +79,21 @@ describe("normalizeEventRow", () => {
     expect(event?.args.account).toBe(HOLDER);
   });
 
+  it("decodes known non-admin role hashes", () => {
+    const event = normalizeEventRow({
+      event_signature: "RoleGranted(bytes32,address,address)",
+      parameters: {
+        role: B20_ROLE_HASHES.BURN_BLOCKED_ROLE,
+        account: HOLDER,
+        sender: HOLDER,
+      },
+      block_number: 1,
+      log_index: 0,
+    });
+
+    expect(event?.args.role).toBe("BURN_BLOCKED_ROLE");
+  });
+
   it("parses parameters supplied as a JSON string", () => {
     const event = normalizeEventRow({
       event_signature: "SupplyCapUpdated(address,uint256,uint256)",
@@ -122,6 +138,11 @@ describe("resolveRole", () => {
     );
   });
 
+  it("decodes known role hashes", () => {
+    expect(resolveRole(B20_ROLE_HASHES.MINT_ROLE)).toBe("MINT_ROLE");
+    expect(resolveRole(B20_ROLE_HASHES.PAUSE_ROLE)).toBe("PAUSE_ROLE");
+  });
+
   it("passes through an already-decoded known role name", () => {
     expect(resolveRole("MINT_ROLE")).toBe("MINT_ROLE");
   });
@@ -142,6 +163,18 @@ describe("risk engine tolerance for normalized live rows", () => {
 
     const report = buildRiskReport(ADDR, [event]);
     expect(report.flags.map((f) => f.id)).toContain("active-admin");
+  });
+
+  it("flags mint risk for a normalized MINT_ROLE hash", () => {
+    const event = normalizeEventRow({
+      event_signature: "RoleGranted(bytes32,address,address)",
+      parameters: { role: B20_ROLE_HASHES.MINT_ROLE, account: HOLDER, sender: HOLDER },
+      block_number: 1,
+      log_index: 0,
+    })!;
+
+    const report = buildRiskReport(ADDR, [event]);
+    expect(report.flags.map((f) => f.id)).toContain("active-mint");
   });
 
   it("does not crash and does not flag an unknown role", () => {
