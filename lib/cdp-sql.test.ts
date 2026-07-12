@@ -79,6 +79,30 @@ describe("normalizeEventRow", () => {
     expect(event?.args.account).toBe(HOLDER);
   });
 
+  it("prefers role_topic when parameters.role is empty", () => {
+    const event = normalizeEventRow({
+      event_signature: "RoleGranted(bytes32,address,address)",
+      parameters: { role: "", account: HOLDER, sender: HOLDER },
+      role_topic: B20_ROLE_HASHES.MINT_ROLE,
+      block_number: 1,
+      log_index: 0,
+    });
+
+    expect(event?.args.role).toBe("MINT_ROLE");
+  });
+
+  it("prefers role_topic when parameters.role is unreadable", () => {
+    const event = normalizeEventRow({
+      event_signature: "RoleGranted(bytes32,address,address)",
+      parameters: { role: "���bad-role���", account: HOLDER, sender: HOLDER },
+      role_topic: B20_ROLE_HASHES.BURN_BLOCKED_ROLE,
+      block_number: 1,
+      log_index: 0,
+    });
+
+    expect(event?.args.role).toBe("BURN_BLOCKED_ROLE");
+  });
+
   it("decodes known non-admin role hashes", () => {
     const event = normalizeEventRow({
       event_signature: "RoleGranted(bytes32,address,address)",
@@ -175,6 +199,19 @@ describe("risk engine tolerance for normalized live rows", () => {
 
     const report = buildRiskReport(ADDR, [event]);
     expect(report.flags.map((f) => f.id)).toContain("active-mint");
+  });
+
+  it("flags burn-blocked risk from role_topic even when parameters.role is unreadable", () => {
+    const event = normalizeEventRow({
+      event_signature: "RoleGranted(bytes32,address,address)",
+      parameters: { role: "���bad-role���", account: HOLDER, sender: HOLDER },
+      role_topic: B20_ROLE_HASHES.BURN_BLOCKED_ROLE,
+      block_number: 1,
+      log_index: 0,
+    })!;
+
+    const report = buildRiskReport(ADDR, [event]);
+    expect(report.flags.map((f) => f.id)).toContain("active-burn-blocked");
   });
 
   it("does not crash and does not flag an unknown role", () => {
