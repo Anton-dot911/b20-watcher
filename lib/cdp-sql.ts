@@ -34,7 +34,6 @@ export interface CdpEventRow {
   event_name?: string | null;
   event_signature?: string | null;
   parameters?: unknown;
-  role_topic?: string | null;
   block_number?: string | number | null;
   log_index?: string | number | null;
 }
@@ -88,18 +87,6 @@ const ROLE_EVENT_NAMES: ReadonlySet<string> = new Set([
   "RoleRevoked",
   "RoleAdminChanged",
 ]);
-
-function isBytes32Hex(value: unknown): boolean {
-  return /^0x[0-9a-fA-F]{64}$/.test(String(value ?? "").trim());
-}
-
-function roleValueFrom(
-  row: CdpEventRow,
-  args: Record<string, string | number>
-): string | number | undefined {
-  if (isBytes32Hex(row.role_topic)) return String(row.role_topic);
-  return args.role;
-}
 
 function toNumber(value: unknown): number {
   const n = Number(value);
@@ -191,9 +178,8 @@ export function normalizeEventRow(row: CdpEventRow): B20Event | null {
   if (!name) return null;
 
   const args = toArgs(parseParameters(row.parameters));
-  if (ROLE_EVENT_NAMES.has(name)) {
-    const roleValue = roleValueFrom(row, args);
-    if (roleValue != null) args.role = resolveRole(roleValue);
+  if (ROLE_EVENT_NAMES.has(name) && args.role != null) {
+    args.role = resolveRole(args.role);
   }
 
   return {
