@@ -1,3 +1,4 @@
+import { resolveRole } from "./roles";
 import type { B20Event } from "./types";
 
 export interface PresentedEventArg {
@@ -126,6 +127,11 @@ function isLikelyUnreadable(text: string): boolean {
   return text.length > 0 && nonPrintable / text.length > 0.12;
 }
 
+function displayValue(key: string, value: unknown): unknown {
+  if (key !== "role") return value;
+  return resolveRole(value);
+}
+
 function argKind(key: string, value: unknown): PresentedEventArg["kind"] {
   const text = String(value);
 
@@ -168,12 +174,16 @@ export function presentEvent(event: B20Event): PresentedEvent {
 
   const args = sortArgs(event.name, Object.entries(event.args))
     .filter(([key, value]) => !shouldHideArg(key, value))
-    .map(([key, value]) => ({
-      key,
-      label: ARG_LABELS[key] ?? key,
-      value,
-      kind: argKind(key, value),
-    }));
+    .map(([key, value]) => {
+      const valueForDisplay = displayValue(key, value);
+
+      return {
+        key,
+        label: ARG_LABELS[key] ?? key,
+        value: valueForDisplay,
+        kind: argKind(key, valueForDisplay),
+      };
+    });
 
   return {
     title: copy.title,
