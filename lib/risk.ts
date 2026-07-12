@@ -7,6 +7,7 @@
 // blocklist, and supply controls, so flags describe controls rather than
 // automatically labeling them malicious.
 
+import { B20_ROLE_NAMES, isKnownB20Role, resolveRole } from "./roles";
 import type {
   B20Event,
   B20Role,
@@ -17,20 +18,10 @@ import type {
   RoleState,
 } from "./types";
 
-// Built-in B20 roles the scanner recognizes. These are kept human-readable for
-// the MVP (no role-hash decoding yet). OPERATOR_ROLE is relevant for Asset
-// variant features such as multiplier and announcements. Policy changes are
-// admin-gated and tracked as PolicyUpdated events, not as a dedicated role.
-const ALL_ROLES: B20Role[] = [
-  "DEFAULT_ADMIN_ROLE",
-  "MINT_ROLE",
-  "BURN_ROLE",
-  "BURN_BLOCKED_ROLE",
-  "PAUSE_ROLE",
-  "UNPAUSE_ROLE",
-  "METADATA_ROLE",
-  "OPERATOR_ROLE",
-];
+// Built-in B20 roles the scanner recognizes. OPERATOR_ROLE is relevant for
+// Asset variant features such as multiplier and announcements. Policy changes
+// are admin-gated and tracked as PolicyUpdated events, not as a dedicated role.
+const ALL_ROLES: B20Role[] = [...B20_ROLE_NAMES];
 
 /** Chronological ordering by block number then log index. */
 function chronological(a: B20Event, b: B20Event): number {
@@ -74,14 +65,18 @@ function deriveState(events: B20Event[]): DerivedState {
   for (const event of ordered) {
     switch (event.name) {
       case "RoleGranted": {
-        const role = String(event.args.role) as B20Role;
+        const role = resolveRole(event.args.role);
+        if (!isKnownB20Role(role)) break;
+
         const account = String(event.args.account ?? "").toLowerCase();
         const holders = roleHolders.get(role);
         if (holders && account) holders.add(account);
         break;
       }
       case "RoleRevoked": {
-        const role = String(event.args.role) as B20Role;
+        const role = resolveRole(event.args.role);
+        if (!isKnownB20Role(role)) break;
+
         const account = String(event.args.account ?? "").toLowerCase();
         const holders = roleHolders.get(role);
         if (holders && account) holders.delete(account);
