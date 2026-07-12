@@ -116,6 +116,11 @@ describe("b20TokenEventsSql", () => {
     }
   });
 
+  it("selects topic1 as role_topic for canonical role-hash recovery", () => {
+    const sql = b20TokenEventsSql("base", TOKEN, 100);
+    expect(sql).toContain("topic1 AS role_topic");
+  });
+
   it("includes the specific role/pause/policy signatures called out by the task", () => {
     const sql = b20TokenEventsSql("base", TOKEN, 100);
     expect(sql).toContain("'RoleGranted(bytes32,address,address)'");
