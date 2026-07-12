@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { buildRiskReport } from "./risk";
+import { B20_ROLE_HASHES } from "./roles";
 import type { B20Event, B20EventName } from "./types";
 
 let seq = 0;
@@ -51,6 +52,15 @@ describe("buildRiskReport", () => {
 
     expect(report.score).toBeGreaterThan(base);
     expect(report.flags.map((f) => f.id)).toContain("active-mint");
+  });
+
+  it("decodes raw known role hashes before scoring", () => {
+    const report = buildRiskReport(ADDR, [grant(B20_ROLE_HASHES.MINT_ROLE, 1)]);
+
+    expect(report.flags.map((f) => f.id)).toContain("active-mint");
+    const mintRole = report.activeRoles.find((r) => r.role === "MINT_ROLE");
+    expect(mintRole?.active).toBe(true);
+    expect(mintRole?.holders).toContain(HOLDER.toLowerCase());
   });
 
   it("adds freeze/seize risk for an active BURN_BLOCKED_ROLE", () => {
