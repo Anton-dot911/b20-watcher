@@ -236,6 +236,8 @@ Safety behavior:
 
 The risk engine lives in [`lib/risk.ts`](lib/risk.ts). It replays a token's event timeline to derive role state and operational conditions, then applies weighted flags.
 
+Known B20 role hashes are decoded in [`lib/roles.ts`](lib/roles.ts). For role events, the CDP timeline query selects `topic1 AS role_topic` so the scanner can recover canonical role hashes even when `parameters.role` is empty or decoded as unreadable bytes.
+
 | Condition | Effect |
 | --- | --- |
 | Active `DEFAULT_ADMIN_ROLE` | High issuer-control risk |
@@ -284,7 +286,8 @@ The timeline also:
 - formats large integer values with separators;
 - shortens addresses and transaction hashes;
 - keeps addresses and hashes copyable;
-- hides unreadable role bytes as `Unknown role`.
+- decodes known B20 role hashes to names such as `MINT_ROLE` and `BURN_BLOCKED_ROLE`;
+- hides still-unknown or unreadable role values as `Unknown role`.
 
 ## JSON API
 
@@ -340,6 +343,7 @@ lib/
   types.ts                           domain types
   mock-data.ts                       mock B20 tokens + events
   risk.ts                            buildRiskReport risk engine
+  roles.ts                           B20 role hash decoding
   score-explanation.ts               main reason + score breakdown
   event-presentation.ts              readable event timeline display
   address.ts                         address validation/normalization
@@ -389,20 +393,19 @@ npm run build
 npm test
 ```
 
-Tests cover address validation, SQL query builders, risk scoring, Supabase cache conversion, refresh auth, diagnostics, score explanation, and event presentation.
+Tests cover address validation, SQL query builders, role hash decoding, risk scoring, Supabase cache conversion, refresh auth, diagnostics, score explanation, and event presentation.
 
 ## Current limitations
 
 - Refresh is explicit. Public reads do not auto-refresh.
 - No event diffing or alerting yet.
-- Role decoding is still partial. Unknown/unreadable role values are hidden in the UI and ignored by scoring rather than crashing the app.
+- Unknown/custom role hashes that are not in [`lib/roles.ts`](lib/roles.ts) are preserved safely and ignored by scoring.
 - Score describes issuer-control capability, not malicious intent.
 - No paid/x402 endpoints yet.
 
 ## Roadmap
 
-1. Full role-hash decoding.
-2. Event diffing between refreshes.
-3. Alerts for role, policy, pause, and supply-cap changes.
-4. Shareable report metadata.
-5. Paid / x402 endpoints for API access and premium monitoring.
+1. Event diffing between refreshes.
+2. Alerts for role, policy, pause, and supply-cap changes.
+3. Shareable report metadata.
+4. Paid / x402 endpoints for API access and premium monitoring.
