@@ -22,8 +22,8 @@ export type B20Network = "base" | "base_sepolia";
 export type DataSource = "mock" | "cdp" | "supabase";
 
 /**
- * Built-in B20 role identifiers the risk engine recognizes. These map to
- * on-chain role hashes but are kept human-readable here.
+ * Built-in B20 role identifiers the risk engine recognizes. Raw on-chain
+ * bytes32 hashes for these roles are decoded in lib/roles.ts.
  */
 export type KnownB20Role =
   | "DEFAULT_ADMIN_ROLE"
@@ -36,11 +36,11 @@ export type KnownB20Role =
   | "OPERATOR_ROLE";
 
 /**
- * A B20 role. Live CDP data may carry a role as a raw bytes32 hash that we
- * cannot decode yet, so the type also admits arbitrary strings. Known roles
- * keep autocomplete; unknown ones are preserved verbatim and ignored by the
- * risk engine instead of crashing it. The `string & {}` keeps the known
- * literals visible in editors while still accepting any string.
+ * A B20 role. Live data can still carry custom or unknown raw bytes32 role
+ * hashes. Known role hashes are decoded to human-readable names; unknown ones
+ * are preserved verbatim and ignored by scoring instead of crashing it. The
+ * `string & {}` keeps known literals visible in editors while still accepting
+ * any string.
  */
 export type B20Role = KnownB20Role | (string & {});
 
@@ -71,7 +71,7 @@ export type B20EventName = KnownB20EventName | (string & {});
 
 /**
  * A single normalized B20 event. The `args` bag carries event-specific
- * parameters (role name, target account, policy id, supply cap, etc.).
+ * parameters (role name/hash, target account, policy id, supply cap, etc.).
  */
 export interface B20Event {
   name: B20EventName;
