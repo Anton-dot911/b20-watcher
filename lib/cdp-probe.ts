@@ -1,5 +1,6 @@
 import "server-only";
 
+import { isValidAddress } from "./address";
 import { B20_FACTORY_ADDRESS, B20_NETWORK } from "./config";
 import { runCdpSql } from "./cdp-sql";
 import {
@@ -7,6 +8,8 @@ import {
   NETWORK_TABLES,
   clampLimit,
 } from "./sql";
+
+const ROLE_GRANTED_SIGNATURE = "RoleGranted(bytes32,address,address)";
 
 interface CountRow {
   count?: number | string | null;
@@ -24,12 +27,32 @@ interface EventSampleRow {
   log_index?: string | number | null;
 }
 
+interface RoleFieldRow {
+  value?: unknown;
+}
+
 export interface CdpProbeCheck {
   ok: boolean;
   sql: string;
   count?: number | null;
   rows?: EventSampleRow[];
   error?: string;
+}
+
+export interface CdpRoleFieldProbeCheck {
+  expression: string;
+  ok: boolean;
+  sql: string;
+  rows: RoleFieldRow[];
+  error?: string;
+}
+
+export interface CdpRoleFieldProbeResult {
+  requested: boolean;
+  eventSignature: typeof ROLE_GRANTED_SIGNATURE;
+  tokenAddress?: string | null;
+  checks: CdpRoleFieldProbeCheck[];
+  supportedExpressions: string[];
 }
 
 export interface CdpProbeResult {
@@ -49,6 +72,12 @@ export interface CdpProbeResult {
     b20CreatedSignatureAnywhere: CdpProbeCheck;
     b20CreatedEventNameAnywhere: CdpProbeCheck;
   };
+  roleFieldProbe?: CdpRoleFieldProbeResult;
+}
+
+export interface CdpProbeOptions {
+  includeRoleFieldProbe?: boolean;
+  tokenAddress?: unknown;
 }
 
 export function sanitizeProbeError(error: unknown): string {
@@ -102,6 +131,38 @@ async function runSampleProbe(sql: string): Promise<CdpProbeCheck> {
   }
 }
 
+async function runRoleFieldCheck(
+  table: string,
+  expression: string,
+  tokenAddress: string | null
+): Promise<CdpRoleFieldProbeCheck> {
+  const tokenFilter = tokenAddress ? `\n  AND address = '${tokenAddress}'` : "";
+  const sql = `SELECT ${expression} AS value
+FROM ${table}
+WHERE event_signature = '${ROLE_GRANTED_SIGNATURE}'
+  AND action = 'added'${tokenFilter}
+ORDER BY block_timestamp DESC
+LIMIT 1`;
+
+  try {
+    const rows = await runCdpSql<RoleFieldRow>(sql);
+    return {
+      expression,
+      ok: true,
+      sql,
+      rows,
+    };
+  } catch (error) {
+    return {
+      expression,
+      ok: false,
+      sql,
+      rows: [],
+      error: sanitizeProbeError(error),
+    };
+  }
+}
+
 function eventSampleSelect(table: string): string {
   return `SELECT
   block_timestamp,
@@ -114,6 +175,27 @@ function eventSampleSelect(table: string): string {
   block_number,
   log_index
 FROM ${table}`;
+}
+
+const ROLE_FIELD_CANDIDATE_EXPRESSIONS = [
+  "parameters['role']",
+  "parameters.role",
+  "topics",
+  "topics[0]",
+  "topics[1]",
+  "topic0",
+  "topic_0",
+  "topic_1",
+  "event_topics",
+  "indexed_parameters",
+  "raw_log",
+  "data",
+] as const;
+
+function normalizeTokenAddress(raw: unknown): string | null {
+  if (typeof raw !== "string") return null;
+  const value = raw.trim();
+  return isValidAddress(value) ? value.toLowerCase() : null;
 }
 
 export function buildCdpProbeSql(limit: number = 5) {
@@ -163,8 +245,34 @@ LIMIT ${safeLimit}`,
   };
 }
 
+async function runRoleFieldProbe(
+  table: string,
+  rawTokenAddress: unknown
+): Promise<CdpRoleFieldProbeResult> {
+  const tokenAddress = normalizeTokenAddress(rawTokenAddress);
+  const checks: CdpRoleFieldProbeCheck[] = [];
+
+  // Run sequentially to reduce CDP rate-limit pressure. This endpoint is
+  // diagnostics-only and protected by x-refresh-secret, so latency is preferred
+  // over accidentally hammering CDP with many invalid candidate expressions.
+  for (const expression of ROLE_FIELD_CANDIDATE_EXPRESSIONS) {
+    checks.push(await runRoleFieldCheck(table, expression, tokenAddress));
+  }
+
+  return {
+    requested: true,
+    eventSignature: ROLE_GRANTED_SIGNATURE,
+    tokenAddress,
+    checks,
+    supportedExpressions: checks
+      .filter((check) => check.ok)
+      .map((check) => check.expression),
+  };
+}
+
 export async function runCdpDiscoveryProbe(
-  rawLimit: unknown = 5
+  rawLimit: unknown = 5,
+  options: CdpProbeOptions = {}
 ): Promise<CdpProbeResult> {
   const sql = buildCdpProbeSql(clampProbeLimit(rawLimit));
 
@@ -196,8 +304,14 @@ export async function runCdpDiscoveryProbe(
     b20CreatedEventNameAnywhere,
   };
 
+  const roleFieldProbe = options.includeRoleFieldProbe
+    ? await runRoleFieldProbe(sql.table, options.tokenAddress)
+    : undefined;
+
   return {
-    ok: Object.values(checks).every((check) => check.ok),
+    ok:
+      Object.values(checks).every((check) => check.ok) &&
+      (!roleFieldProbe || roleFieldProbe.checks.some((check) => check.ok)),
     network: B20_NETWORK,
     table: sql.table,
     factoryAddress: sql.factory,
@@ -205,5 +319,6 @@ export async function runCdpDiscoveryProbe(
     eventSignature: B20_CREATED_SIGNATURE,
     limit: sql.safeLimit,
     checks,
+    roleFieldProbe,
   };
 }
