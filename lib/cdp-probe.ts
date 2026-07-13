@@ -131,18 +131,41 @@ async function runSampleProbe(sql: string): Promise<CdpProbeCheck> {
   }
 }
 
-async function runRoleFieldCheck(
+export const ROLE_FIELD_CANDIDATE_EXPRESSIONS = [
+  "parameters['role']",
+  "parameters.role",
+  "topics",
+  "topics[0]",
+  "topics[1]",
+  "topic0",
+  "topic_0",
+  "topic_1",
+  "event_topics",
+  "indexed_parameters",
+  "raw_log",
+  "data",
+] as const;
+
+export function buildRoleFieldProbeSql(
   table: string,
   expression: string,
   tokenAddress: string | null
-): Promise<CdpRoleFieldProbeCheck> {
+): string {
   const tokenFilter = tokenAddress ? `\n  AND address = '${tokenAddress}'` : "";
-  const sql = `SELECT ${expression} AS value
+  return `SELECT ${expression} AS value
 FROM ${table}
 WHERE event_signature = '${ROLE_GRANTED_SIGNATURE}'
   AND action = 'added'${tokenFilter}
 ORDER BY block_timestamp DESC
 LIMIT 1`;
+}
+
+async function runRoleFieldCheck(
+  table: string,
+  expression: string,
+  tokenAddress: string | null
+): Promise<CdpRoleFieldProbeCheck> {
+  const sql = buildRoleFieldProbeSql(table, expression, tokenAddress);
 
   try {
     const rows = await runCdpSql<RoleFieldRow>(sql);
@@ -176,21 +199,6 @@ function eventSampleSelect(table: string): string {
   log_index
 FROM ${table}`;
 }
-
-const ROLE_FIELD_CANDIDATE_EXPRESSIONS = [
-  "parameters['role']",
-  "parameters.role",
-  "topics",
-  "topics[0]",
-  "topics[1]",
-  "topic0",
-  "topic_0",
-  "topic_1",
-  "event_topics",
-  "indexed_parameters",
-  "raw_log",
-  "data",
-] as const;
 
 function normalizeTokenAddress(raw: unknown): string | null {
   if (typeof raw !== "string") return null;
