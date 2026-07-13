@@ -8,12 +8,18 @@ vi.mock("./cdp-sql", async (importOriginal) => {
 });
 
 vi.mock("./b20-cache", () => ({
+  getCachedRiskReport: vi.fn(async () => null),
   upsertTokens: vi.fn(async () => {}),
   upsertEvents: vi.fn(async () => {}),
   upsertRiskReport: vi.fn(async () => {}),
 }));
 
-import { upsertEvents, upsertRiskReport, upsertTokens } from "./b20-cache";
+import {
+  getCachedRiskReport,
+  upsertEvents,
+  upsertRiskReport,
+  upsertTokens,
+} from "./b20-cache";
 import { runCdpSql } from "./cdp-sql";
 import { refreshRecentB20Tokens, refreshTokenRisk } from "./refresh";
 
@@ -22,6 +28,7 @@ const HOLDER = "0xa11ce00000000000000000000000000000000abc";
 const ZERO_HASH = `0x${"0".repeat(64)}`;
 
 const runCdpSqlMock = vi.mocked(runCdpSql);
+const getCachedRiskReportMock = vi.mocked(getCachedRiskReport);
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -61,6 +68,20 @@ describe("refreshRecentB20Tokens", () => {
       tokens: 1,
       events: 1,
       reports: 1,
+      eventDiff: {
+        tokensChecked: 1,
+        tokensWithNewEvents: 0,
+        newEvents: 0,
+        byToken: [
+          {
+            tokenAddress: ADDR,
+            baseline: true,
+            previousEvents: 0,
+            currentEvents: 1,
+            newEvents: 0,
+          },
+        ],
+      },
     });
 
     expect(upsertTokens).toHaveBeenCalledTimes(1);
@@ -79,12 +100,97 @@ describe("refreshRecentB20Tokens", () => {
     expect(report.flags.map((f) => f.id)).toContain("active-admin");
   });
 
+  it("reports new events when a cached previous timeline exists", async () => {
+    getCachedRiskReportMock.mockResolvedValueOnce({
+      tokenAddress: ADDR,
+      score: 0,
+      level: "low",
+      summary: "previous",
+      flags: [],
+      activeRoles: [],
+      stats: {
+        totalEvents: 1,
+        activeRoleCount: 0,
+        flagCount: 0,
+        paused: false,
+        adminRenounced: false,
+      },
+      timeline: [
+        {
+          name: "RoleGranted",
+          transactionHash: "0xabc",
+          blockNumber: 18_000_100,
+          logIndex: 0,
+          timestamp: new Date(0).toISOString(),
+          args: {},
+        },
+      ],
+      generatedAt: new Date(0).toISOString(),
+    });
+
+    runCdpSqlMock
+      .mockResolvedValueOnce([
+        {
+          token_address: ADDR,
+          name: "Acme Regulated USD",
+          symbol: "aRUSD",
+          decimals: 6,
+          variant: "regulated",
+          block_timestamp: "2026-07-08 18:10:00.000",
+        },
+      ] as never)
+      .mockResolvedValueOnce([
+        {
+          event_signature: "RoleGranted(bytes32,address,address)",
+          parameters: { role: ZERO_HASH, account: HOLDER, sender: HOLDER },
+          transaction_hash: "0xabc",
+          block_number: 18_000_100,
+          log_index: 0,
+        },
+        {
+          event_signature: "SupplyCapUpdated(address,uint256,uint256)",
+          parameters: { newSupplyCap: "2", oldSupplyCap: "1" },
+          transaction_hash: "0xdef",
+          block_number: 18_000_101,
+          log_index: 0,
+        },
+      ] as never);
+
+    const result = await refreshRecentB20Tokens(5);
+
+    expect(result.eventDiff).toMatchObject({
+      tokensChecked: 1,
+      tokensWithNewEvents: 1,
+      newEvents: 1,
+    });
+    expect(result.eventDiff.byToken[0]).toMatchObject({
+      tokenAddress: ADDR,
+      baseline: false,
+      previousEvents: 1,
+      currentEvents: 2,
+      newEvents: 1,
+      latestNewEvents: [
+        {
+          name: "SupplyCapUpdated",
+          transactionHash: "0xdef",
+          blockNumber: 18_000_101,
+          logIndex: 0,
+        },
+      ],
+    });
+  });
+
   it("is a safe no-op set of upserts when discovery returns nothing", async () => {
     runCdpSqlMock.mockResolvedValueOnce([] as never);
 
     const result = await refreshRecentB20Tokens();
 
-    expect(result).toMatchObject({ tokens: 0, events: 0, reports: 0 });
+    expect(result).toMatchObject({
+      tokens: 0,
+      events: 0,
+      reports: 0,
+      eventDiff: { tokensChecked: 0, tokensWithNewEvents: 0, newEvents: 0 },
+    });
     expect(upsertTokens).toHaveBeenCalledTimes(1); // called with []
     expect(upsertEvents).not.toHaveBeenCalled();
     expect(upsertRiskReport).not.toHaveBeenCalled();
@@ -92,7 +198,7 @@ describe("refreshRecentB20Tokens", () => {
 });
 
 describe("refreshTokenRisk", () => {
-  it("upserts a token stub, its events, and its report", async () => {
+  it("upserts a token stub, its events, report, and event diff", async () => {
     runCdpSqlMock.mockResolvedValueOnce([
       {
         event_signature: "Paused(address,uint8[])",
@@ -111,6 +217,18 @@ describe("refreshTokenRisk", () => {
       events: 1,
       reports: 1,
       tokenAddress: ADDR,
+      eventDiff: {
+        tokensChecked: 1,
+        tokensWithNewEvents: 0,
+        newEvents: 0,
+        byToken: [
+          {
+            tokenAddress: ADDR,
+            baseline: true,
+            currentEvents: 1,
+          },
+        ],
+      },
     });
     expect(upsertTokens).toHaveBeenCalledTimes(1);
     expect(upsertEvents).toHaveBeenCalledWith(ADDR, expect.any(Array));
