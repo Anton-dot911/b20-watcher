@@ -1,0 +1,86 @@
+name: CDP Diagnostics Probe
+
+on:
+  workflow_dispatch:
+    inputs:
+      limit:
+        description: "Probe sample limit"
+        required: false
+        default: "1"
+      include_role_field_probe:
+        description: "Run role-field candidate probes"
+        required: false
+        default: "true"
+        type: choice
+        options:
+          - "true"
+          - "false"
+      token_address:
+        description: "Optional token address to scope role-field probe"
+        required: false
+        default: ""
+
+jobs:
+  probe:
+    name: Run CDP diagnostics probe
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve diagnostics URL
+        id: config
+        shell: bash
+        env:
+          REFRESH_URL: ${{ secrets.B20_WATCHER_REFRESH_URL }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${REFRESH_URL}" ]; then
+            echo "B20_WATCHER_REFRESH_URL secret is not set" >&2
+            exit 1
+          fi
+
+          base_url="${REFRESH_URL%/api/refresh/recent}"
+          if [ "${base_url}" = "${REFRESH_URL}" ]; then
+            base_url="${REFRESH_URL%/api/refresh/token}"
+          fi
+
+          probe_url="${base_url}/api/diagnostics/cdp-probe"
+          echo "probe_url=${probe_url}" >> "$GITHUB_OUTPUT"
+
+      - name: Call diagnostics probe
+        shell: bash
+        env:
+          PROBE_URL: ${{ steps.config.outputs.probe_url }}
+          REFRESH_SECRET: ${{ secrets.B20_WATCHER_REFRESH_SECRET }}
+          LIMIT: ${{ inputs.limit }}
+          INCLUDE_ROLE_FIELD_PROBE: ${{ inputs.include_role_field_probe }}
+          TOKEN_ADDRESS: ${{ inputs.token_address }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${REFRESH_SECRET}" ]; then
+            echo "B20_WATCHER_REFRESH_SECRET secret is not set" >&2
+            exit 1
+          fi
+
+          body=$(jq -cn \
+            --argjson limit "${LIMIT:-1}" \
+            --arg includeRoleFieldProbe "${INCLUDE_ROLE_FIELD_PROBE:-true}" \
+            --arg tokenAddress "${TOKEN_ADDRESS:-}" \
+            '{limit: $limit, includeRoleFieldProbe: ($includeRoleFieldProbe == "true")} + (if $tokenAddress == "" then {} else {tokenAddress: $tokenAddress} end)')
+
+          echo "Calling CDP diagnostics probe"
+          echo "Body: ${body}"
+
+          response_file="$(mktemp)"
+          status=$(curl -sS -o "${response_file}" -w "%{http_code}" \
+            -X POST "${PROBE_URL}" \
+            -H "Content-Type: application/json" \
+            -H "x-refresh-secret: ${REFRESH_SECRET}" \
+            -d "${body}")
+
+          echo "HTTP status: ${status}"
+          cat "${response_file}" | jq .
+
+          if [ "${status}" -lt 200 ] || [ "${status}" -ge 300 ]; then
+            exit 1
+          fi
