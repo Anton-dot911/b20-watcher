@@ -116,9 +116,9 @@ describe("b20TokenEventsSql", () => {
     }
   });
 
-  it("selects topic1 as role_topic for canonical role-hash recovery", () => {
+  it("does not select unsupported topic1 column", () => {
     const sql = b20TokenEventsSql("base", TOKEN, 100);
-    expect(sql).toContain("topic1 AS role_topic");
+    expect(sql).not.toContain("topic1");
   });
 
   it("includes the specific role/pause/policy signatures called out by the task", () => {
