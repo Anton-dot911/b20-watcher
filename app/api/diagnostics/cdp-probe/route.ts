@@ -6,9 +6,19 @@ import { checkRefreshSecret } from "@/lib/refresh-auth";
 export const dynamic = "force-dynamic";
 
 // POST /api/diagnostics/cdp-probe
-// Protected by x-refresh-secret. Runs several CDP SQL probe queries to explain
-// whether B20 discovery is returning zero because of address casing, event name,
-// event signature, factory address, or missing indexed data.
+// Protected by x-refresh-secret. Runs CDP SQL probe queries to explain whether
+// B20 discovery is returning zero because of address casing, event name, event
+// signature, factory address, or missing indexed data.
+//
+// Optional body:
+// {
+//   "limit": 5,
+//   "includeRoleFieldProbe": true,
+//   "tokenAddress": "0x..."
+// }
+//
+// includeRoleFieldProbe is diagnostics-only. It checks candidate raw-topic field
+// expressions with LIMIT 1 and does not affect production refresh SQL.
 export async function POST(request: Request) {
   const auth = checkRefreshSecret(request.headers.get("x-refresh-secret"));
   if (!auth.ok) {
@@ -16,9 +26,17 @@ export async function POST(request: Request) {
   }
 
   const body = (await request.json().catch(() => null)) as
-    | { limit?: unknown }
+    | {
+        limit?: unknown;
+        includeRoleFieldProbe?: unknown;
+        tokenAddress?: unknown;
+      }
     | null;
 
-  const result = await runCdpDiscoveryProbe(body?.limit ?? 5);
+  const result = await runCdpDiscoveryProbe(body?.limit ?? 5, {
+    includeRoleFieldProbe: body?.includeRoleFieldProbe === true,
+    tokenAddress: body?.tokenAddress,
+  });
+
   return NextResponse.json(result, { status: result.ok ? 200 : 207 });
 }
