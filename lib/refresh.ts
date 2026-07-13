@@ -9,6 +9,7 @@ import "server-only";
 
 import { normalizeAddress } from "./address";
 import {
+  getCachedRiskReport,
   upsertEvents,
   upsertRiskReport,
   upsertTokens,
@@ -21,6 +22,12 @@ import {
   type CdpEventRow,
 } from "./cdp-sql";
 import { B20_FACTORY_ADDRESS, B20_NETWORK } from "./config";
+import {
+  diffTokenEvents,
+  summarizeEventDiffs,
+  type RefreshEventDiff,
+  type TokenEventDiff,
+} from "./event-diff";
 import { buildRiskReport } from "./risk";
 import { b20TokenEventsSql, discoverB20TokensSql } from "./sql";
 import type { B20Event, B20Network, B20Token } from "./types";
@@ -44,8 +51,13 @@ export interface RefreshResult {
   reports: number;
   partial: boolean;
   errors: RefreshError[];
+  eventDiff: RefreshEventDiff;
   /** Present for a single-token refresh. */
   tokenAddress?: string;
+}
+
+function emptyEventDiff(): RefreshEventDiff {
+  return summarizeEventDiffs([]);
 }
 
 function sanitizeRefreshError(error: unknown): string {
@@ -69,6 +81,14 @@ async function fetchTokenEventsFromCdp(address: string): Promise<B20Event[]> {
   return rows
     .map(normalizeEventRow)
     .filter((event): event is B20Event => event !== null);
+}
+
+async function buildDiffForToken(
+  tokenAddress: string,
+  freshEvents: B20Event[]
+): Promise<TokenEventDiff> {
+  const previousReport = await getCachedRiskReport(tokenAddress);
+  return diffTokenEvents(tokenAddress, previousReport?.timeline, freshEvents);
 }
 
 /**
@@ -102,6 +122,7 @@ export async function refreshRecentB20Tokens(
           message: sanitizeRefreshError(error),
         },
       ],
+      eventDiff: emptyEventDiff(),
     };
   }
 
@@ -122,11 +143,13 @@ export async function refreshRecentB20Tokens(
           message: sanitizeRefreshError(error),
         },
       ],
+      eventDiff: emptyEventDiff(),
     };
   }
 
   let eventCount = 0;
   let reportCount = 0;
+  const tokenDiffs: TokenEventDiff[] = [];
 
   for (const token of tokens) {
     const address = normalizeAddress(token.address);
@@ -142,6 +165,16 @@ export async function refreshRecentB20Tokens(
         message: sanitizeRefreshError(error),
       });
       continue;
+    }
+
+    try {
+      tokenDiffs.push(await buildDiffForToken(address, events));
+    } catch (error) {
+      errors.push({
+        stage: "timeline",
+        tokenAddress: address,
+        message: `Diff failed: ${sanitizeRefreshError(error)}`,
+      });
     }
 
     try {
@@ -176,6 +209,7 @@ export async function refreshRecentB20Tokens(
     reports: reportCount,
     partial: errors.length > 0,
     errors,
+    eventDiff: summarizeEventDiffs(tokenDiffs),
   };
 }
 
@@ -207,6 +241,7 @@ export async function refreshTokenRisk(address: string): Promise<RefreshResult> 
   ]);
 
   const events = await fetchTokenEventsFromCdp(normalized);
+  const tokenDiff = await buildDiffForToken(normalized, events);
   await upsertEvents(normalized, events);
 
   const report = buildRiskReport(normalized, events);
@@ -220,5 +255,6 @@ export async function refreshTokenRisk(address: string): Promise<RefreshResult> 
     partial: false,
     errors: [],
     tokenAddress: normalized,
+    eventDiff: summarizeEventDiffs([tokenDiff]),
   };
 }
