@@ -81,9 +81,58 @@ jobs:
             -H "x-refresh-secret: $REFRESH_SECRET" \
             -d "{\"limit\": $LIMIT}")"
 
+          network="$(jq -r '.network // "unknown"' "$response_file")"
+          tokens="$(jq -r '.tokens // 0' "$response_file")"
+          events="$(jq -r '.events // 0' "$response_file")"
+          reports="$(jq -r '.reports // 0' "$response_file")"
+          partial="$(jq -r '.partial // false' "$response_file")"
+          errors_count="$(jq -r '(.errors // []) | length' "$response_file")"
+          tokens_checked="$(jq -r '.eventDiff.tokensChecked // 0' "$response_file")"
+          tokens_with_new_events="$(jq -r '.eventDiff.tokensWithNewEvents // 0' "$response_file")"
+          new_events="$(jq -r '.eventDiff.newEvents // 0' "$response_file")"
+          baseline_tokens="$(jq -r '[.eventDiff.byToken[]? | select(.baseline == true)] | length' "$response_file")"
+
+          echo ""
+          echo "=== Refresh summary ==="
           echo "HTTP status: $http_status"
-          cat "$response_file"
-          echo
+          echo "Network: $network"
+          echo "Tokens: $tokens"
+          echo "Events: $events"
+          echo "Reports: $reports"
+          echo "Partial: $partial"
+          echo "Errors: $errors_count"
+          echo "New events: $new_events"
+          echo "Tokens with new events: $tokens_with_new_events"
+          echo "Tokens checked: $tokens_checked"
+          echo "Baseline tokens: $baseline_tokens"
+
+          if [ "$errors_count" -gt 0 ]; then
+            echo ""
+            echo "First errors:"
+            jq -r '(.errors // [])[0:3][] | "- [" + (.stage // "unknown") + "] " + (.tokenAddress // "") + " " + (.message // "")' "$response_file"
+          fi
+
+          {
+            echo "### B20 Refresh Summary"
+            echo ""
+            echo "| Field | Value |"
+            echo "| --- | --- |"
+            echo "| HTTP status | $http_status |"
+            echo "| Network | $network |"
+            echo "| Tokens | $tokens |"
+            echo "| Events | $events |"
+            echo "| Reports | $reports |"
+            echo "| Partial | $partial |"
+            echo "| Errors | $errors_count |"
+            echo "| New events | $new_events |"
+            echo "| Tokens with new events | $tokens_with_new_events |"
+            echo "| Tokens checked | $tokens_checked |"
+            echo "| Baseline tokens | $baseline_tokens |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          echo ""
+          echo "Full response JSON:"
+          cat "$response_file" | jq .
 
           if [ "$http_status" -lt 200 ] || [ "$http_status" -ge 300 ]; then
             echo "Refresh failed with HTTP status $http_status" >&2
