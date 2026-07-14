@@ -10,6 +10,7 @@ import "server-only";
 
 import { normalizeAddress } from "./address";
 import { B20_NETWORK } from "./config";
+import type { RefreshEventDiff } from "./event-diff";
 import { getSupabaseServerClient } from "./supabase-server";
 import type {
   B20Event,
@@ -34,6 +35,31 @@ export const EVENT_UPSERT_CONFLICT_TARGET =
 
 /** Supabase upsert conflict target for b20_risk_reports. Mirrors primary key (network, token_address). */
 export const RISK_REPORT_UPSERT_CONFLICT_TARGET = "network,token_address";
+
+export type RefreshRunStatus = "success" | "partial" | "failed";
+
+export interface CachedRefreshRun {
+  id: number;
+  network: B20Network;
+  status: RefreshRunStatus;
+  tokens: number;
+  events: number;
+  reports: number;
+  partial: boolean;
+  errors: unknown[];
+  eventDiff: RefreshEventDiff;
+  completedAt: string;
+}
+
+export interface RefreshRunInput {
+  network: B20Network;
+  tokens: number;
+  events: number;
+  reports: number;
+  partial: boolean;
+  errors: unknown[];
+  eventDiff: RefreshEventDiff;
+}
 
 // --- DB row shapes ----------------------------------------------------------
 
@@ -77,6 +103,20 @@ interface RiskReportRow {
   timeline: B20Event[];
   generated_at: string;
   updated_at?: string;
+}
+
+interface RefreshRunRow {
+  id: number;
+  network: string;
+  status: string;
+  tokens: number;
+  events: number;
+  reports: number;
+  partial: boolean;
+  errors: unknown[] | null;
+  event_diff: RefreshEventDiff | null;
+  completed_at: string;
+  created_at?: string;
 }
 
 // --- JSONB safety -----------------------------------------------------------
@@ -148,9 +188,45 @@ export function rowToEvent(row: EventRow): B20Event {
   };
 }
 
+function emptyRefreshEventDiff(): RefreshEventDiff {
+  return {
+    tokensChecked: 0,
+    tokensWithNewEvents: 0,
+    newEvents: 0,
+    byToken: [],
+  };
+}
+
+function normalizeRefreshRunStatus(status: string): RefreshRunStatus {
+  if (status === "partial" || status === "failed") return status;
+  return "success";
+}
+
+/** Converts a `b20_refresh_runs` row into a UI-safe refresh run summary. */
+export function rowToRefreshRun(row: RefreshRunRow): CachedRefreshRun {
+  return {
+    id: row.id,
+    network: row.network as B20Network,
+    status: normalizeRefreshRunStatus(row.status),
+    tokens: row.tokens ?? 0,
+    events: row.events ?? 0,
+    reports: row.reports ?? 0,
+    partial: row.partial ?? row.status === "partial",
+    errors: row.errors ?? [],
+    eventDiff: row.event_diff ?? emptyRefreshEventDiff(),
+    completedAt: row.completed_at ?? EPOCH_ISO,
+  };
+}
+
 /** Deterministic primary key for an event row. */
 function eventId(network: B20Network, event: B20Event): string {
   return `${network}:${event.transactionHash.toLowerCase()}:${event.logIndex}`;
+}
+
+function refreshStatusFor(input: RefreshRunInput): RefreshRunStatus {
+  if (!input.partial && input.errors.length === 0) return "success";
+  if (input.reports > 0 || input.events > 0 || input.tokens > 0) return "partial";
+  return "failed";
 }
 
 // --- Reads ------------------------------------------------------------------
@@ -218,6 +294,23 @@ export async function getCachedRiskReport(
     throw new Error(`Failed to read cached risk report: ${error.message}`);
   }
   return data ? rowToRiskReport(data as RiskReportRow) : null;
+}
+
+/** Returns the latest refresh run summary for the active network, if present. */
+export async function getLatestRefreshRun(): Promise<CachedRefreshRun | null> {
+  const supabase = getSupabaseServerClient();
+  const { data, error } = await supabase
+    .from("b20_refresh_runs")
+    .select("*")
+    .eq("network", B20_NETWORK)
+    .order("completed_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(`Failed to read latest refresh run: ${error.message}`);
+  }
+  return data ? rowToRefreshRun(data as RefreshRunRow) : null;
 }
 
 // --- Writes -----------------------------------------------------------------
@@ -324,5 +417,26 @@ export async function upsertRiskReport(report: RiskReport): Promise<void> {
     .upsert(row, { onConflict: RISK_REPORT_UPSERT_CONFLICT_TARGET });
   if (error) {
     throw new Error(`Failed to upsert risk report: ${error.message}`);
+  }
+}
+
+/** Inserts one refresh run metadata row for dashboard status display. */
+export async function insertRefreshRun(input: RefreshRunInput): Promise<void> {
+  const row = {
+    network: input.network,
+    status: refreshStatusFor(input),
+    tokens: input.tokens,
+    events: input.events,
+    reports: input.reports,
+    partial: input.partial,
+    errors: sanitizeJsonbValue(input.errors ?? []),
+    event_diff: sanitizeJsonbValue(input.eventDiff ?? emptyRefreshEventDiff()),
+    completed_at: new Date().toISOString(),
+  };
+
+  const supabase = getSupabaseServerClient();
+  const { error } = await supabase.from("b20_refresh_runs").insert(row);
+  if (error) {
+    throw new Error(`Failed to insert refresh run: ${error.message}`);
   }
 }

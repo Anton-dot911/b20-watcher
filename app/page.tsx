@@ -1,6 +1,10 @@
 import { TokenSearchTable } from "@/components/TokenSearchTable";
 import { B20_NETWORK, dataModeLabel, MOCK_MODE } from "@/lib/config";
-import { getB20RiskReport, listB20Tokens } from "@/lib/data-source";
+import {
+  getB20RiskReport,
+  getLatestRefreshRun,
+  listB20Tokens,
+} from "@/lib/data-source";
 import type { B20Token, RiskReport } from "@/lib/types";
 import styles from "./page.module.css";
 
@@ -23,9 +27,23 @@ function networkLabel(): string {
   return B20_NETWORK === "base_sepolia" ? "Base Sepolia" : "Base";
 }
 
+function refreshStatusLabel(status?: string): string {
+  if (status === "success") return "OK";
+  if (status === "partial") return "Partial";
+  if (status === "failed") return "Failed";
+  return "Unknown";
+}
+
 export default async function HomePage() {
   let rows: Row[] = [];
   let loadError = false;
+  let latestRefreshRun = null as Awaited<ReturnType<typeof getLatestRefreshRun>>;
+
+  try {
+    latestRefreshRun = await getLatestRefreshRun();
+  } catch {
+    latestRefreshRun = null;
+  }
 
   try {
     const tokens = await listB20Tokens();
@@ -51,6 +69,12 @@ export default async function HomePage() {
     .map((report) => report.generatedAt)
     .sort()
     .at(-1);
+  const lastRefreshLabel = latestRefreshRun
+    ? formatUtc(latestRefreshRun.completedAt)
+    : lastGeneratedAt
+      ? formatUtc(lastGeneratedAt)
+      : "not yet";
+  const eventDiff = latestRefreshRun?.eventDiff;
 
   return (
     <div className="container">
@@ -74,7 +98,7 @@ export default async function HomePage() {
             <div className={styles.livePanel__meta}>
               Network: {networkLabel()}
               <br />
-              Last report: {lastGeneratedAt ? formatUtc(lastGeneratedAt) : "not yet"}
+              Last refresh: {lastRefreshLabel}
             </div>
           </div>
         </div>
@@ -96,6 +120,34 @@ export default async function HomePage() {
         <div className={styles.statusCard}>
           <span>Data mode</span>
           <strong>{MOCK_MODE ? "Mock" : "Live"}</strong>
+        </div>
+      </section>
+
+      <section className={styles.refreshPanel} aria-label="Latest refresh summary">
+        <div className={styles.refreshPanel__head}>
+          <div>
+            <span>Latest refresh</span>
+            <strong>{refreshStatusLabel(latestRefreshRun?.status)}</strong>
+          </div>
+          <div className={styles.refreshPanel__time}>{lastRefreshLabel}</div>
+        </div>
+        <div className={styles.refreshPanel__grid}>
+          <div>
+            <span>Tokens checked</span>
+            <strong>{eventDiff ? eventDiff.tokensChecked : "—"}</strong>
+          </div>
+          <div>
+            <span>New events</span>
+            <strong>{eventDiff ? eventDiff.newEvents : "—"}</strong>
+          </div>
+          <div>
+            <span>Tokens with changes</span>
+            <strong>{eventDiff ? eventDiff.tokensWithNewEvents : "—"}</strong>
+          </div>
+          <div>
+            <span>Errors</span>
+            <strong>{latestRefreshRun ? latestRefreshRun.errors.length : "—"}</strong>
+          </div>
         </div>
       </section>
 

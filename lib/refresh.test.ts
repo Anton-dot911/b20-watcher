@@ -9,6 +9,7 @@ vi.mock("./cdp-sql", async (importOriginal) => {
 
 vi.mock("./b20-cache", () => ({
   getCachedRiskReport: vi.fn(async () => null),
+  insertRefreshRun: vi.fn(async () => {}),
   upsertTokens: vi.fn(async () => {}),
   upsertEvents: vi.fn(async () => {}),
   upsertRiskReport: vi.fn(async () => {}),
@@ -16,6 +17,7 @@ vi.mock("./b20-cache", () => ({
 
 import {
   getCachedRiskReport,
+  insertRefreshRun,
   upsertEvents,
   upsertRiskReport,
   upsertTokens,
@@ -29,13 +31,14 @@ const ZERO_HASH = `0x${"0".repeat(64)}`;
 
 const runCdpSqlMock = vi.mocked(runCdpSql);
 const getCachedRiskReportMock = vi.mocked(getCachedRiskReport);
+const insertRefreshRunMock = vi.mocked(insertRefreshRun);
 
 beforeEach(() => {
   vi.clearAllMocks();
 });
 
 describe("refreshRecentB20Tokens", () => {
-  it("discovers tokens and upserts tokens, events, and reports", async () => {
+  it("discovers tokens and upserts tokens, events, reports, and refresh metadata", async () => {
     runCdpSqlMock
       // 1) token discovery
       .mockResolvedValueOnce([
@@ -98,6 +101,10 @@ describe("refreshRecentB20Tokens", () => {
     const report = vi.mocked(upsertRiskReport).mock.calls[0][0];
     // The admin role is active, so the report should flag it.
     expect(report.flags.map((f) => f.id)).toContain("active-admin");
+
+    expect(insertRefreshRunMock).toHaveBeenCalledWith(
+      expect.objectContaining({ tokens: 1, events: 1, reports: 1, partial: false })
+    );
   });
 
   it("reports new events when a cached previous timeline exists", async () => {
@@ -178,6 +185,11 @@ describe("refreshRecentB20Tokens", () => {
         },
       ],
     });
+    expect(insertRefreshRunMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventDiff: expect.objectContaining({ newEvents: 1, tokensWithNewEvents: 1 }),
+      })
+    );
   });
 
   it("is a safe no-op set of upserts when discovery returns nothing", async () => {
@@ -194,11 +206,22 @@ describe("refreshRecentB20Tokens", () => {
     expect(upsertTokens).toHaveBeenCalledTimes(1); // called with []
     expect(upsertEvents).not.toHaveBeenCalled();
     expect(upsertRiskReport).not.toHaveBeenCalled();
+    expect(insertRefreshRunMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not fail refresh when refresh metadata insert fails", async () => {
+    insertRefreshRunMock.mockRejectedValueOnce(new Error("table missing"));
+    runCdpSqlMock.mockResolvedValueOnce([] as never);
+
+    await expect(refreshRecentB20Tokens()).resolves.toMatchObject({
+      tokens: 0,
+      partial: false,
+    });
   });
 });
 
 describe("refreshTokenRisk", () => {
-  it("upserts a token stub, its events, report, and event diff", async () => {
+  it("upserts a token stub, its events, report, event diff, and refresh metadata", async () => {
     runCdpSqlMock.mockResolvedValueOnce([
       {
         event_signature: "Paused(address,uint8[])",
@@ -235,6 +258,9 @@ describe("refreshTokenRisk", () => {
     expect(upsertRiskReport).toHaveBeenCalledTimes(1);
     const report = vi.mocked(upsertRiskReport).mock.calls[0][0];
     expect(report.stats.paused).toBe(true);
+    expect(insertRefreshRunMock).toHaveBeenCalledWith(
+      expect.objectContaining({ tokenAddress: ADDR, tokens: 1, events: 1, reports: 1 })
+    );
   });
 
   it("throws on an invalid address without touching the cache", async () => {
@@ -244,5 +270,6 @@ describe("refreshTokenRisk", () => {
     expect(upsertTokens).not.toHaveBeenCalled();
     expect(upsertEvents).not.toHaveBeenCalled();
     expect(upsertRiskReport).not.toHaveBeenCalled();
+    expect(insertRefreshRunMock).not.toHaveBeenCalled();
   });
 });
