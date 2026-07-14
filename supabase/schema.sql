@@ -74,3 +74,23 @@ create table if not exists b20_risk_reports (
   foreign key (network, token_address)
     references b20_tokens(network, address) on delete cascade
 );
+
+-- Refresh execution metadata. This lets the dashboard show the latest refresh
+-- status and event-diff summary without reading GitHub Actions logs.
+create table if not exists b20_refresh_runs (
+  id           bigserial primary key,
+  network      text not null,
+  status       text not null,
+  tokens       integer not null default 0,
+  events       integer not null default 0,
+  reports      integer not null default 0,
+  partial      boolean not null default false,
+  errors       jsonb not null default '[]',
+  event_diff   jsonb not null default '{}',
+  completed_at timestamptz not null default now(),
+  created_at   timestamptz not null default now()
+);
+
+-- Latest refresh status lookup scoped to a network.
+create index if not exists b20_refresh_runs_network_completed_at_idx
+  on b20_refresh_runs (network, completed_at desc);
