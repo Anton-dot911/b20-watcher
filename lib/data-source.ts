@@ -18,6 +18,8 @@ import {
   getCachedRiskReport,
   getCachedToken,
   getCachedTokens,
+  getLatestRefreshRun as getCachedLatestRefreshRun,
+  type CachedRefreshRun,
 } from "./b20-cache";
 import {
   normalizeB20CreatedRow,
@@ -125,4 +127,10 @@ export async function getB20RiskReport(address: string): Promise<RiskReport> {
     .map(normalizeEventRow)
     .filter((event): event is B20Event => event !== null);
   return buildRiskReport(normalized, events);
+}
+
+/** Returns the latest cached refresh-run metadata in Supabase mode. */
+export async function getLatestRefreshRun(): Promise<CachedRefreshRun | null> {
+  if (DATA_SOURCE !== "supabase") return null;
+  return getCachedLatestRefreshRun();
 }
