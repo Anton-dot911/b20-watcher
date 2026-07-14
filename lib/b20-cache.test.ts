@@ -4,6 +4,7 @@ import {
   EVENT_UPSERT_CONFLICT_TARGET,
   RISK_REPORT_UPSERT_CONFLICT_TARGET,
   rowToEvent,
+  rowToRefreshRun,
   rowToRiskReport,
   rowToToken,
   sanitizeJsonbValue,
@@ -205,5 +206,69 @@ describe("rowToRiskReport", () => {
     expect(report.flags).toEqual([]);
     expect(report.activeRoles).toEqual([]);
     expect(report.timeline).toEqual([]);
+  });
+});
+
+describe("rowToRefreshRun", () => {
+  it("maps a refresh run row to dashboard metadata", () => {
+    const run = rowToRefreshRun({
+      id: 7,
+      network: "base_sepolia",
+      status: "success",
+      tokens: 5,
+      events: 15,
+      reports: 5,
+      partial: false,
+      errors: [],
+      event_diff: {
+        tokensChecked: 5,
+        tokensWithNewEvents: 1,
+        newEvents: 2,
+        byToken: [],
+      },
+      completed_at: "2026-07-14T00:00:00.000Z",
+    });
+
+    expect(run).toEqual({
+      id: 7,
+      network: "base_sepolia",
+      status: "success",
+      tokens: 5,
+      events: 15,
+      reports: 5,
+      partial: false,
+      errors: [],
+      eventDiff: {
+        tokensChecked: 5,
+        tokensWithNewEvents: 1,
+        newEvents: 2,
+        byToken: [],
+      },
+      completedAt: "2026-07-14T00:00:00.000Z",
+    });
+  });
+
+  it("defaults missing refresh event diff fields", () => {
+    const run = rowToRefreshRun({
+      id: 8,
+      network: "base",
+      status: "unknown-status",
+      tokens: 0,
+      events: 0,
+      reports: 0,
+      partial: false,
+      errors: null,
+      event_diff: null,
+      completed_at: "2026-07-14T00:00:00.000Z",
+    });
+
+    expect(run.status).toBe("success");
+    expect(run.errors).toEqual([]);
+    expect(run.eventDiff).toEqual({
+      tokensChecked: 0,
+      tokensWithNewEvents: 0,
+      newEvents: 0,
+      byToken: [],
+    });
   });
 });
