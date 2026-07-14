@@ -10,6 +10,7 @@ import "server-only";
 import { normalizeAddress } from "./address";
 import {
   getCachedRiskReport,
+  insertRefreshRun,
   upsertEvents,
   upsertRiskReport,
   upsertTokens,
@@ -65,6 +66,16 @@ function sanitizeRefreshError(error: unknown): string {
   return message.replace(/\s+/g, " ").slice(0, 240);
 }
 
+async function recordRefreshRun(result: RefreshResult): Promise<RefreshResult> {
+  try {
+    await insertRefreshRun(result);
+  } catch {
+    // Refresh metadata is non-critical. Do not fail the production refresh when
+    // the optional b20_refresh_runs table has not been applied yet.
+  }
+  return result;
+}
+
 /** Fetches recent B20 token snapshots from CDP SQL. */
 async function fetchRecentTokensFromCdp(limit: number): Promise<B20Token[]> {
   const sql = discoverB20TokensSql(B20_NETWORK, limit, B20_FACTORY_ADDRESS);
@@ -110,7 +121,7 @@ export async function refreshRecentB20Tokens(
   try {
     tokens = await fetchRecentTokensFromCdp(safeLimit);
   } catch (error) {
-    return {
+    return recordRefreshRun({
       network: B20_NETWORK,
       tokens: 0,
       events: 0,
@@ -123,7 +134,7 @@ export async function refreshRecentB20Tokens(
         },
       ],
       eventDiff: emptyEventDiff(),
-    };
+    });
   }
 
   const errors: RefreshError[] = [];
@@ -131,7 +142,7 @@ export async function refreshRecentB20Tokens(
   try {
     await upsertTokens(tokens);
   } catch (error) {
-    return {
+    return recordRefreshRun({
       network: B20_NETWORK,
       tokens: tokens.length,
       events: 0,
@@ -144,7 +155,7 @@ export async function refreshRecentB20Tokens(
         },
       ],
       eventDiff: emptyEventDiff(),
-    };
+    });
   }
 
   let eventCount = 0;
@@ -202,7 +213,7 @@ export async function refreshRecentB20Tokens(
     }
   }
 
-  return {
+  return recordRefreshRun({
     network: B20_NETWORK,
     tokens: tokens.length,
     events: eventCount,
@@ -210,7 +221,7 @@ export async function refreshRecentB20Tokens(
     partial: errors.length > 0,
     errors,
     eventDiff: summarizeEventDiffs(tokenDiffs),
-  };
+  });
 }
 
 /**
@@ -247,7 +258,7 @@ export async function refreshTokenRisk(address: string): Promise<RefreshResult> 
   const report = buildRiskReport(normalized, events);
   await upsertRiskReport(report);
 
-  return {
+  return recordRefreshRun({
     network: B20_NETWORK,
     tokens: 1,
     events: events.length,
@@ -256,5 +267,5 @@ export async function refreshTokenRisk(address: string): Promise<RefreshResult> 
     errors: [],
     tokenAddress: normalized,
     eventDiff: summarizeEventDiffs([tokenDiff]),
-  };
+  });
 }
